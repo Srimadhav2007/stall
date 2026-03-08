@@ -15,14 +15,10 @@ struct IF_IDRF{
 	int pc;
 	bool valid;
 	vector<string> instpieces;
-	
 	IF_IDRF(){
 		pc = 0;
 		valid = false;
 		instpieces.clear();
-	}
-	~IF_IDRF(){
-
 	}
 };
 struct IDRF_EX{
@@ -65,9 +61,6 @@ struct IDRF_EX{
 		RegWrite = false;
 		MemToReg = false;
 	}
-	~IDRF_EX(){
-
-	}
 };
 struct EX_MEM{
 	int pc;
@@ -102,9 +95,6 @@ struct EX_MEM{
 		RegWrite = false;
 		MemToReg = false;
 	}
-	~EX_MEM(){
-
-	}
 };
 struct MEM_WB{
 	int pc;
@@ -125,9 +115,6 @@ struct MEM_WB{
 		RegWrite = false;
 		MemToReg = false;
 	}
-	~MEM_WB(){
-
-	}
 };
 
 class Core{
@@ -143,14 +130,14 @@ class Core{
 	EX_MEM pr3;
 	MEM_WB pr4;
     map<string,int> datamap;
-	int nextdatastart = 0;
+	int nextdatastart;
 	vector<string> instructions;
 	map<string,int> labels;
 	char* memory;
 	bool stall;
 	int latency;
 	bool hazard(int reg){
-    	return reg != -1 &&
+    	return reg != -1 && reg!=0 &&
         	((pr2.valid && pr2.RegWrite && pr2.rd == reg) ||
          	(pr3.valid && pr3.RegWrite && pr3.rd == reg) ||
          	(pr4.valid && pr4.RegWrite && pr4.rd == reg));
@@ -178,6 +165,7 @@ class Core{
 			return;
 		}
 		int inst=opcodes[pr1.instpieces[0]];
+
 		pr2.pc=pr1.pc;
 		switch (inst)
 		{
@@ -186,8 +174,9 @@ class Core{
 		case 2:
 		case 3:
     		pr2.rd = stoi(pr1.instpieces[1].substr(1));
-    		pr2.rs1 = stoi(pr1.instpieces[2].substr(1));
+			pr2.rs1 = stoi(pr1.instpieces[2].substr(1));
     		pr2.rs2 = stoi(pr1.instpieces[3].substr(1));
+
 			if(hazard(pr2.rs1) || hazard(pr2.rs2)){
             	stall = true;
             	return;
@@ -198,7 +187,12 @@ class Core{
 		    pr2.MemToReg = false;
     		pr2.MemWrite = false;
     		pr2.Branch = false;
-    		pr2.RegWrite = true;
+			if(pr2.rd == 0){
+    			pr2.RegWrite = false;
+			}
+			else{			
+				pr2.RegWrite = true;
+			}
 			pr2.ALUOp=inst;
     		break;
 		case 4:
@@ -216,7 +210,12 @@ class Core{
     		pr2.MemToReg = false;
     		pr2.MemWrite = false;
     		pr2.Branch = false;
-    		pr2.RegWrite = true;
+			if(pr2.rd == 0){
+    			pr2.RegWrite = false;
+			}
+			else{			
+				pr2.RegWrite = true;
+			}
 			pr2.ALUOp=4;
     		break;
 		case 5:
@@ -230,7 +229,12 @@ class Core{
     		pr2.MemToReg = false;
     		pr2.MemWrite = false;
     		pr2.Branch = false;
-    		pr2.RegWrite = true;
+			if(pr2.rd == 0){
+    			pr2.RegWrite = false;
+			}
+			else{			
+				pr2.RegWrite = true;
+			}
 			pr2.ALUOp=4;
     		break;
 		case 6:
@@ -249,7 +253,12 @@ class Core{
     		pr2.MemToReg = false;
     		pr2.MemWrite = false;
     		pr2.Branch = false;
-    		pr2.RegWrite = true;
+			if(pr2.rd == 0){
+    			pr2.RegWrite = false;
+			}
+			else{			
+				pr2.RegWrite = true;
+			}
 			pr2.ALUOp=4;
 			break;
 		case 7:
@@ -257,14 +266,19 @@ class Core{
     		pr2.MemToReg = true;
     		pr2.MemWrite = false;
     		pr2.Branch = false;
-    		pr2.RegWrite = true;
-    		pr2.rd = stoi(pr1.instpieces[1].substr(1));
+			pr2.rd = stoi(pr1.instpieces[1].substr(1));
     		pr2.imm = stoi(pr1.instpieces[2].substr(0,pr1.instpieces[2].find('(')));
-    		pr2.rs1 = stoi(pr1.instpieces[2].substr(1 + pr1.instpieces[2].find('('),pr1.instpieces[2].find(')') - (1 + pr1.instpieces[2].find('('))));
+    		pr2.rs1 = stoi(pr1.instpieces[2].substr(2 + pr1.instpieces[2].find('('),pr1.instpieces[2].find(')') - (2 + pr1.instpieces[2].find('('))));
 			if(hazard(pr2.rs1)){
             	stall = true;
             	return;
         	}
+			if(pr2.rd == 0){
+    			pr2.RegWrite = false;
+			}
+			else{			
+				pr2.RegWrite = true;
+			}
     		pr2.rs1val = registers[pr2.rs1].i;
 		    pr2.rs2 = -1;
     		pr2.rs2val = -1;
@@ -272,11 +286,11 @@ class Core{
     		break;
 		case 8:
     		pr2.MemRead = false;
-    		pr2.MemToReg = false;
+    		pr2.MemToReg = false;	
 		    pr2.MemWrite = true;
     		pr2.Branch = false;
     		pr2.RegWrite = false;
-    		pr2.rs2 = stoi(pr1.instpieces[1].substr(1));
+			pr2.rs2 = stoi(pr1.instpieces[1].substr(1));
     		pr2.rs2val = registers[pr2.rs2].i;
     		pr2.imm = stoi(pr1.instpieces[2].substr(0,pr1.instpieces[2].find('(')));
     		pr2.rs1 = stoi(pr1.instpieces[2].substr(1 + pr1.instpieces[2].find('('),pr1.instpieces[2].find(')') - (1 + pr1.instpieces[2].find('('))));
@@ -382,6 +396,7 @@ class Core{
 	void WB(){
 		if(!pr4.valid)return;
 		if(pr4.RegWrite){
+			if(pr4.rd==0){return;}
 			registers[pr4.rd].i=pr4.aluResult;
 		}
 	}
@@ -519,51 +534,71 @@ class Core{
 		pr2 = IDRF_EX();
 		pr3 = EX_MEM();
 		pr4 = MEM_WB();
-
 		datamap.clear();
 		instructions.clear();
 		labels.clear();
 		stringstream ss(program);
 		string line;
+		nextdatastart = 0;
+		bool indata = false;
 		while(getline(ss, line)){
 			if(!line.empty()){
+
 				if(line==".data"){
-					while(getline(ss,line)){
-						if(line==".text")break;
-						if (line.find(' ') != string::npos) {
-							size_t p = line.find(":");
-							string dataname = line.substr(0, p);
-							string restofline = line.substr(p + 2);
-							size_t q = restofline.find('.');
-							size_t r = restofline.find(' ', q);
-							string datatype = restofline.substr(q + 1, r - q - 1);
-
-							string valuePart = restofline.substr(r + 1);
-
-							int datastart = nextdatastart;
-							datamap[dataname] = datastart;
-							if (datatype == "word") {
-								stringstream ss(valuePart);
-								string token;
-								
-								while (ss >> token) {
-									int value = stoi(token);
-									memcpy(&memory[nextdatastart], &value, 4);
-									nextdatastart += 4;
-								}
-							}
-
-							else if (datatype == "string") {
-								if (valuePart.front() == '"') valuePart = valuePart.substr(1);
-								if (valuePart.back()  == '"') valuePart = valuePart.substr(0, valuePart.size() - 1);
-
-								nextdatastart += valuePart.size() + 1;	
-							}
-						}
- 
-					}
+					indata = true;
+					continue;
 				}
-				if(line==".text")continue;
+				if(line==".text"){
+					indata = false;
+					continue;
+				}
+				if(indata){
+					if (line.find(' ') != string::npos) {
+						if (!line.empty() && line.back() == '\r')
+							line.pop_back();
+
+						size_t p = line.find(":");
+						if (p == string::npos) continue;
+
+						string dataname = line.substr(0, p);
+						string restofline = line.substr(p + 2);
+
+						size_t q = restofline.find('.');
+						if (q == string::npos) continue;
+
+						size_t r = restofline.find(' ', q);
+						if (r == string::npos) continue; 
+
+						string datatype = restofline.substr(q + 1, r - q - 1);
+						string valuePart = restofline.substr(r + 1);
+						int datastart = nextdatastart;
+						datamap[dataname] = datastart;
+
+						if (datatype == "word") {
+							stringstream ss2(valuePart);
+							string token;
+							while (ss2 >> token) {
+								bool valid = !token.empty();
+								for (char c : token)
+									if (!isdigit(c) && c != '-') { valid = false; break; }
+
+								if (!valid) {continue;}
+								int value = stoi(token);
+								memcpy(&memory[nextdatastart], &value, 4);
+								nextdatastart += 4;
+							}		
+						}
+						else if (datatype == "string") {
+							if (!valuePart.empty() && valuePart.front() == '"') 
+								valuePart = valuePart.substr(1);
+							if (!valuePart.empty() && valuePart.back() == '"')  
+								valuePart = valuePart.substr(0, valuePart.size() - 1);
+							memcpy(&memory[nextdatastart], valuePart.c_str(), valuePart.size() + 1);
+							nextdatastart += valuePart.size() + 1;
+						}
+					}
+					continue;
+				}
 				if(line.find(':')!=string::npos){
 					labels[line.substr(0,line.find(':'))]=instructions.size();
 					line=line.substr(line.find(':')+1);
@@ -585,6 +620,7 @@ class Core{
 				}
 				else instructions.push_back(line);
 			}
+			}
 		}
 		cout<<"Before execution:\n";
 		for(int i = 0; i < 32; i++)
@@ -597,7 +633,7 @@ class Core{
 			if(stall)pr3.valid=false;
 			else EX();
 			IDRF();
-			if(!stall)IF();
+			if(!stall){IF();}
 			clock++;
 		}
 		clock+=latency;
@@ -611,5 +647,4 @@ class Core{
 		delete[] memory;
 	}
 };
-
 }
