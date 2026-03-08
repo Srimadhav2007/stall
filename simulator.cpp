@@ -148,6 +148,7 @@ class Core{
 	map<string,int> labels;
 	char* memory;
 	bool stall;
+	int latency;
 	bool hazard(int reg){
     	return reg != -1 &&
         	((pr2.valid && pr2.RegWrite && pr2.rd == reg) ||
@@ -178,6 +179,7 @@ class Core{
 		}
 		int inst=opcodes[pr1.instpieces[0]];
 		pr2.pc=pr1.pc;
+		latency+=(latencies[inst]-1);
 		switch (inst)
 		{
 		case 0:
@@ -339,6 +341,8 @@ class Core{
     		pr2.RegWrite = false;
 			pr2.ALUOp=5;
     		break;
+		case 14:
+			break;
 		default:
 			break;
 		}
@@ -383,24 +387,11 @@ class Core{
 	}
 	public:
 	Core(){
-		pc=0;
-		clock=0;
-		registers=new Register[32];
-		memory=new char[4096];
-
-		fstream f("config.json");
-			json config;
-			f>>config;
-			memory=new char[config["memory"]];
-			forwarding=config["forwarding"];
-			latencies.push_back(config["latency"][0]["add"]);
-			latencies.push_back(config["latency"][0]["sub"]);
-			latencies.push_back(config["latency"][0]["mul"]);
-			latencies.push_back(config["latency"][0]["div"]);
-			pc=0;
-			clock=0;
-			registers=new Register[32];
-
+		ifstream f("config.json");
+		json config;
+		f>>config;
+		int memsize=config["memory"].get<int>();
+		memory = memsize > 4096 ? new char[memsize] : new char[4096];
 		opcodes["add"]=0;
 		opcodes["sub"]=1;
 		opcodes["mul"]=2;
@@ -416,6 +407,28 @@ class Core{
 		opcodes["beqz"]=12;
 		opcodes["j"]=13;
 		opcodes["jal"]=14;
+		auto &lat = config["latency"][0];
+		forwarding = config["forwarding"].get<bool>();
+		latencies.push_back(lat["add"].get<int>());
+		latencies.push_back(lat["sub"].get<int>());
+		latencies.push_back(lat["mul"].get<int>());
+		latencies.push_back(lat["div"].get<int>());
+		latencies.push_back(lat["addi"].get<int>());
+		latencies.push_back(lat["li"].get<int>());
+		latencies.push_back(lat["la"].get<int>());
+		latencies.push_back(lat["lw"].get<int>());
+		latencies.push_back(lat["sw"].get<int>());
+		latencies.push_back(lat["bne"].get<int>());
+		latencies.push_back(lat["beq"].get<int>());
+		latencies.push_back(lat["bnez"].get<int>());
+		latencies.push_back(lat["beqz"].get<int>());
+		latencies.push_back(lat["j"].get<int>());
+		latencies.push_back(lat["jal"].get<int>());
+		pc=0;
+		clock=0;
+		latency=0;
+		registers=new Register[32];
+
 
 		functions.push_back([this](){
 			pr3.aluResult=pr2.rs1val+pr2.rs2val;
@@ -587,6 +600,7 @@ class Core{
 			if(!stall)IF();
 			clock++;
 		}
+		clock+=latency;
 		for(int i = 0; i < 32; i++)
     		cout<<registers[i].i<<" ";
 		cout<<endl;

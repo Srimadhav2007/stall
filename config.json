@@ -4,7 +4,19 @@
         "add":1,
         "sub":1,
         "mul":1,
-        "div":1
+        "div":1,
+        "addi":1,
+        "li":1,
+        "la":1,
+        "lw":1,
+        "sw":1,
+        "bne":1,
+        "beq":1,
+        "bnez":1,
+        "beqz":1,
+        "j":1,
+        "jal":1
+        
         }
     ],
     "memory":4096,
