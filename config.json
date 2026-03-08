@@ -1,0 +1,12 @@
+{
+    "latency":[
+        {
+        "add":1,
+        "sub":1,
+        "mul":1,
+        "div":1
+        }
+    ],
+    "memory":4096,
+    "forwarding":true
+}

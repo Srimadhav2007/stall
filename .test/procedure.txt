@@ -1,0 +1,37 @@
+testx.cpp:
+#include <jni.h>
+#include "Testx.h"
+JNIEXPORT jint JNICALL Java_Testx_add(JNIEnv *env, jobject obj, jint a,jint b){
+    return a+b;
+}
+
+Testx.java:
+public class Testx{
+    static{
+        System.loadLibrary("testx");
+    }
+    public native int add(int a,int b);
+
+    public static void main(String[] args){
+        Testx obj=new Testx();
+        System.out.println(obj.add(2,3));
+    }
+}
+
+
+Commands:
+$ javac Testx.java 
+$ javac -h . Testx.java 
+$ g++ -fPIC -I "$JAVA_HOME/include" -I"$JAVA_HOME/include/linux" -shared -o libtestx.so testx.cpp
+$ java -Djava.library.path=. Testx
+5
+
+Explanation:
+First we compile the .java file
+Next we generate a .h file for native methods(c/cpp header file)
+Then we compile the cpp file that we have(which includes the name of the header that we compiled using javac above)
+    IMP: name of the .so file should be lib<name>.so, where <name> is what we write in System.loadLibrary("<name>");
+    For windows the naming convention is <name>.dll
+Now we run the file with specifying the shared library path
+
+javac -h Testx.java is enough for both compilation into .class and generation of .h file too
