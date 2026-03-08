@@ -179,7 +179,6 @@ class Core{
 		}
 		int inst=opcodes[pr1.instpieces[0]];
 		pr2.pc=pr1.pc;
-		latency+=(latencies[inst]-1);
 		switch (inst)
 		{
 		case 0:
@@ -346,6 +345,7 @@ class Core{
 		default:
 			break;
 		}
+		latency+=(latencies[inst]-1);
 		pr2.valid=true;
 	}
 	void EX(){
