@@ -140,6 +140,7 @@ class Core{
 	int memsize;
 	bool stall;
 	int latency;
+	float ipc;
 	bool hazard(int reg){
 		if(reg == -1 || reg == 0) return false;
     	if(pr2.valid && pr2.RegWrite && pr2.rd == reg){
@@ -615,6 +616,7 @@ class Core{
 		clock = 0;
 		latency=0;
 		nextdatastart = 0;
+		ipc=0;
 		for(int i = 0; i < 32; i++)
     		registers[i].i = 0;
 		pr1 = IF_IDRF();
@@ -725,10 +727,11 @@ class Core{
 			//cout<<"PC="<<pc<<endl;
 		}
 		clock+=latency;
+		ipc=(float)instructions.size()/(float)clock;
 		for(int i = 0; i < 32; i++)
     		cout<<registers[i].i<<" ";
 		cout<<endl;
-		cout<<"Clock="<<clock<<endl;
+		cout<<"Clock="<<clock<<"\tIPC="<<ipc<<endl;
 	}
 	~Core(){
 		delete[] registers;
