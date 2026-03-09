@@ -1,7 +1,7 @@
 #include <bits/stdc++.h>
 using namespace std;
 
-#include "simulator.cpp"
+#include "Simulator/Core.hpp"
 
 int main(int argc, char* argv[]) {
 

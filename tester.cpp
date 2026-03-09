@@ -1,6 +1,6 @@
-#include <bits/stdc++.h>
+#include "Simulator/Core.hpp"
 using namespace std;
-#include "simulator.cpp"
+
 
 int main() {
     Core core;
