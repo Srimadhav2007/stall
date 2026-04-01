@@ -13,21 +13,27 @@
 using namespace std;
 using json = nlohmann::json;
 
+struct L2Tag{
+    bool isinst;
+    int tag;
+};
+
 class Core{
 private:
     map<string,int> opcodes;
     vector<function<void()>> functions;
-    vector<string> instructions;
+    vector<int> instructions;
+    vector<string> insts;
     map<string,int> labels;
     map<string,int> datamap;
-    int nextdatastart;
 
     int pc;
     int clock;
     int latency_acc;
     float ipc;
     int num_stalls;
-    int remaining_ex_cycles;
+    int nextdatastart;
+    int num_instructions;
 
     Register* registers;
 
@@ -35,7 +41,18 @@ private:
     bool forwarding;
     vector<int> latencies;
     char* memory;
+    int* l1it;
+    int* l1dt;
+    L2Tag* l2t;
+    char* l1i;
+    char* l1d;
+    char* l2;
     int memsize;
+    int l1isize;
+    int l1dsize;
+    int l2size;
+    int bsize;
+    int crp;
 
     IF_IDRF pr1;
     IDRF_EX pr2;
@@ -57,10 +74,14 @@ private:
     void AluConfig();
     void execConfig(string& program);
     void Parse(stringstream& ss);
+    void AssemblyToMachineCode(vector<string>& insts);
+
+    void LRU(bool isl1,bool isi,int tag);
+    void PLRU(bool isl1,bool isi,int tag);
 
 public:
     Core();
-    void execute(string& program);
+    vector<int> execute(string& program);
     ~Core();
 };
 

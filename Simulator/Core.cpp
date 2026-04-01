@@ -9,7 +9,17 @@ Core::Core(){
 	memsize=config["memory"].get<int>();
 	if(memsize<4096)memsize=4096;
 	memory=new char[memsize];
-
+	crp=config["crp"].get<int>();
+	l1isize=config["l1i"].get<int>();
+	l1dsize=config["l1d"].get<int>();
+	l2size=config["l2"].get<int>();
+	bsize=config["bsize"].get<int>();
+	l1it=new int[l1isize/bsize];
+	l1dt=new int[l1dsize/bsize];
+	l2t=new L2Tag[l2size/bsize];
+	l1i=new char[l1isize];
+	l1d=new char[l1dsize];
+	l2=new char[l2size];
 	opcodes["add"]=0;
 	opcodes["sub"]=1;
 	opcodes["mul"]=2;
@@ -57,4 +67,10 @@ Core::Core(){
 Core::~Core(){
     delete[] registers;
 	delete[] memory;
+	delete[] l1d;
+	delete[] l1i;
+	delete[] l2;
+	delete[] l1it;
+	delete[] l1dt;
+	delete[] l2t;
 }

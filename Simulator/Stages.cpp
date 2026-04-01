@@ -23,13 +23,8 @@ void Core::IF(){
         pr1.valid=false;
         return;
     }
-    vector<string> pieces;
-    stringstream ss(instructions[pc]);
-    string word;
-    while(ss >> word){
-        pieces.push_back(word);
-    }
-    pr1.instpieces=pieces;
+    pr1.instruction=instructions[pc];
+    num_instructions++;
     pr1.pc=pc;
     pc++;
     pr1.valid=true;
@@ -40,106 +35,144 @@ void Core::IDRF(){
         pr2.valid=false;
         return;
     }
-    
-    string opName = pr1.instpieces[0];
-    if (opcodes.find(opName) == opcodes.end()) {
-        pr2.valid=false;
-        return;
+    auto rd_field  = [](int i){ return (i >> 19) & 0x1F; };
+    auto rs1_field = [](int i){ return (i >> 14) & 0x1F; };
+    auto rs2_field = [](int i){ return (i >>  9) & 0x1F; };
+    auto imm_addi = [](int i) -> int {
+        int sign = (i >> 13) & 1;
+        int mag  = (i & 0x1FFC) >> 2;   // bits [12:2], 11-bit magnitude
+        return sign ? -mag : mag;
+    };
+    auto imm_la = [](int i) -> int {
+        int sign = (i >> 18) & 1;
+        int mag  = (i & 0x3FFE0) >> 5;  // bits [17:5], 13-bit magnitude
+        return sign ? -mag : mag;
+    };
+    auto imm_branch = [](int i) -> int { return i & 0x3FFF; };
+    auto imm_jump   = [](int i) -> int { return i & 0x7FFFF; };
+    int inst = pr1.instruction;
+    if(inst==INT32_MAX){
+        cerr<<"INVALID INSTRUCTION!!\npc="<<pr1.pc<<", inst: "<<inst<<", assembly inst: "<<insts[pc]<<(insts.size()==instructions.size()?"YES, ":"NO,\n")<<"All instructions:"<<endl;
+        for(int i=0;i<insts.size();i++){
+            cout<<"i="<<i<<"- inst: "<<instructions[i]<<", assembly inst: "<<insts[i]<<endl;
+        }
+        exit(1);
     }
-
-    int inst=opcodes[opName];
+    int opc  = (inst >> 24) & 0x3F;
     IDRF_EX next_pr2;
     next_pr2.valid = true;
     next_pr2.pc = pr1.pc;
-    next_pr2.original_inst_opcode = inst;
-
-    auto parseReg = [](const string& s) {
-        if (s.empty()) return -1;
-        if (s[0] == 'x' || s[0] == 'r') return stoi(s.substr(1));
-        return -1;
-    };
-
-    auto parseImm = [](const string& s) {
-        return stoi(s);
-    };
-
-    if (inst >= 0 && inst <= 3) { // add, sub, mul, div
-        next_pr2.rd = parseReg(pr1.instpieces[1]);
-        next_pr2.rs1 = parseReg(pr1.instpieces[2]);
-        next_pr2.rs2 = parseReg(pr1.instpieces[3]);
-        if (next_pr2.rs2 == -1) next_pr2.imm = parseImm(pr1.instpieces[3]);
+    next_pr2.original_inst_opcode = opc;
+    switch (opc)
+    {
+    case 0:
+    case 1:
+    case 2:
+    case 3:
+    {
+        next_pr2.rd  = rd_field(inst);
+        next_pr2.rs1 = rs1_field(inst);
+        next_pr2.rs2 = rs2_field(inst);
         next_pr2.RegWrite = (next_pr2.rd != 0);
-        next_pr2.ALUOp = inst;
-    } else if (inst == 15) { // slt
-        next_pr2.rd = parseReg(pr1.instpieces[1]);
-        next_pr2.rs1 = parseReg(pr1.instpieces[2]);
-        next_pr2.rs2 = parseReg(pr1.instpieces[3]);
-        if (next_pr2.rs2 == -1) next_pr2.imm = parseImm(pr1.instpieces[3]);
-        next_pr2.RegWrite = (next_pr2.rd != 0);
-        next_pr2.ALUOp = 7;
-    } else if (inst == 4) { // addi
-        next_pr2.rd = parseReg(pr1.instpieces[1]);
-        next_pr2.rs1 = parseReg(pr1.instpieces[2]);
-        next_pr2.imm = parseImm(pr1.instpieces[3]);
+        next_pr2.ALUOp = opc;               // 0=add,1=sub,2=mul,3=div
+        break;
+    }
+    case 4:                                  // addi
+    {
+        next_pr2.rd  = rd_field(inst);
+        next_pr2.rs1 = rs1_field(inst);
+        next_pr2.imm = imm_addi(inst);
         next_pr2.RegWrite = (next_pr2.rd != 0);
         next_pr2.ALUOp = 4;
-    } else if (inst == 5) { // li
-        next_pr2.rd = parseReg(pr1.instpieces[1]);
-        next_pr2.imm = parseImm(pr1.instpieces[2]);
+        break;
+    }
+    case 5:                                  // li  (rs1 unused → stays -1)
+    {
+        next_pr2.rd  = rd_field(inst);
+        next_pr2.imm = imm_addi(inst);      // same encoding as addi's imm
         next_pr2.RegWrite = (next_pr2.rd != 0);
         next_pr2.ALUOp = 4;
-    } else if (inst == 6) { // la
-        next_pr2.rd = parseReg(pr1.instpieces[1]);
-        if(pr1.instpieces[2].find('+') != string::npos){
-            string dataname = pr1.instpieces[2].substr(0, pr1.instpieces[2].find('+'));
-            next_pr2.imm = datamap[dataname] + stoi(pr1.instpieces[2].substr(pr1.instpieces[2].find('+')+1));
-        } else {
-            next_pr2.imm = datamap[pr1.instpieces[2]];
-        }
+        break;
+    }
+    case 6:                                  // la  (rs1 unused → stays -1)
+    {
+        next_pr2.rd  = rd_field(inst);
+        next_pr2.imm = imm_la(inst);
         next_pr2.RegWrite = (next_pr2.rd != 0);
         next_pr2.ALUOp = 4;
-    } else if (inst == 7) { // lw
-        next_pr2.rd = parseReg(pr1.instpieces[1]);
-        string offset_reg = pr1.instpieces[2];
-        int p1 = offset_reg.find('(');
-        int p2 = offset_reg.find(')');
-        next_pr2.imm = stoi(offset_reg.substr(0, p1));
-        next_pr2.rs1 = parseReg(offset_reg.substr(p1+1, p2-p1-1));
+        break;
+    }
+    case 7:                                  // lw
+    {
+        next_pr2.rd  = rd_field(inst);
+        next_pr2.rs1 = rs1_field(inst);
+        next_pr2.imm = imm_addi(inst);
         next_pr2.RegWrite = (next_pr2.rd != 0);
-        next_pr2.MemRead = true;
+        next_pr2.MemRead  = true;
         next_pr2.MemToReg = true;
         next_pr2.ALUOp = 4;
-    } else if (inst == 8) { // sw
-        next_pr2.rs2 = parseReg(pr1.instpieces[1]);
-        string offset_reg = pr1.instpieces[2];
-        int p1 = offset_reg.find('(');
-        int p2 = offset_reg.find(')');
-        next_pr2.imm = stoi(offset_reg.substr(0, p1));
-        next_pr2.rs1 = parseReg(offset_reg.substr(p1+1, p2-p1-1));
+        break;
+    }
+    case 8:                                  // sw
+    {
+        // Encoder puts rs2 (src reg) in rd-slot, rs1 (base) in rs1-slot
+        next_pr2.rs2 = rd_field(inst);
+        next_pr2.rs1 = rs1_field(inst);
+        next_pr2.imm = imm_addi(inst);
         next_pr2.MemWrite = true;
         next_pr2.ALUOp = 4;
-    } else if (inst == 9 || inst == 10) { // bne, beq
-        next_pr2.rs1 = parseReg(pr1.instpieces[1]);
-        next_pr2.rs2 = parseReg(pr1.instpieces[2]);
-        next_pr2.imm = labels[pr1.instpieces[3]];
+        break;
+    }
+    case 9: case 10:                         // bne, beq
+    {
+        // Encoder puts rs1 in rd-slot, rs2 in rs1-slot
+        next_pr2.rs1 = rd_field(inst);
+        next_pr2.rs2 = rs1_field(inst);
+        next_pr2.imm = imm_branch(inst);
         next_pr2.Branch = true;
-        next_pr2.ALUOp = (inst == 9) ? 5 : 6;
-    } else if (inst == 11 || inst == 12) { // bnez, beqz
-        next_pr2.rs1 = parseReg(pr1.instpieces[1]);
+        next_pr2.ALUOp  = (opc == 9) ? 5 : 6;
+        break;
+    }
+    case 11: case 12:                        // bnez, beqz  (rs2 = x0)
+    {
+        next_pr2.rs1 = rd_field(inst);
         next_pr2.rs2 = 0;
-        next_pr2.imm = labels[pr1.instpieces[2]];
+        next_pr2.imm = imm_branch(inst);
         next_pr2.Branch = true;
-        next_pr2.ALUOp = (inst == 11) ? 5 : 6;
-    } else if (inst == 13) { // j
-        next_pr2.imm = labels[pr1.instpieces[1]];
+        next_pr2.ALUOp  = (opc == 11) ? 5 : 6;
+        break;
+    }
+    case 13:                                 // j
+    {
+        next_pr2.imm   = imm_jump(inst);
         next_pr2.Branch = true;
-        next_pr2.ALUOp = 8;
-    } else if (inst == 14) { // jal
-        next_pr2.rd = parseReg(pr1.instpieces[1]);
-        next_pr2.imm = labels[pr1.instpieces[2]];
-        next_pr2.Branch = true;
+        next_pr2.ALUOp  = 8;
+        break;
+    }
+    case 14:                                 // jal
+    {
+        next_pr2.rd  = rd_field(inst);
+        next_pr2.imm = imm_jump(inst);
+        next_pr2.Branch   = true;
         next_pr2.RegWrite = (next_pr2.rd != 0);
-        next_pr2.ALUOp = 8;
+        next_pr2.ALUOp    = 8;
+        break;
+    }
+    case 15:                               // slt
+    {    
+        next_pr2.rd  = rd_field(inst);
+        next_pr2.rs1 = rs1_field(inst);
+        next_pr2.rs2 = rs2_field(inst);
+        next_pr2.RegWrite = (next_pr2.rd != 0);
+        next_pr2.ALUOp = 7;
+        break;
+    }
+    default:
+    {
+        pr3.valid=false;
+        return;
+
+    }
     }
 
     bool hazard_stall = false;
@@ -176,25 +209,12 @@ void Core::IDRF(){
 }
 
 void Core::EX(){
-    if (remaining_ex_cycles > 0) {
-        remaining_ex_cycles--;
-        pr3.valid = false;
-        stall = true;
-        return;
-    }
-
     if(!pr2.valid){
         pr3.valid=false;
         return;
     }
 
-    int curr_latency = latencies[pr2.original_inst_opcode];
-    if (curr_latency > 1) {
-        remaining_ex_cycles = curr_latency - 1;
-        stall = true;
-        pr3.valid = false;
-        return;
-    }
+    num_stalls += (latencies[pr2.original_inst_opcode]-1);
 
     pr3.pc = pr2.pc;
     pr3.rd = pr2.rd;
@@ -212,6 +232,7 @@ void Core::EX(){
     if(pr3.Branch && pr3.branchTarget != -1){
         pc = pr3.branchTarget;
         pr1.valid=false;
+        num_instructions--;
     }
     pr3.valid=true;
 }
@@ -260,4 +281,20 @@ void Core::WB(){
         if(pr4.RegWrite && pr4.rd > 0 && pr4.rd < 32)
             registers[pr4.rd].i = pr4.aluResult;
     }
+}
+
+void Core::LRU(bool isl1,bool isi,int tag){
+    if(isl1&&isi){
+        
+    }
+    else if(isl1&&!isi){
+
+    }
+    else{
+
+    }
+}
+
+void Core::PLRU(bool isl1,bool isi,int tag){
+    
 }

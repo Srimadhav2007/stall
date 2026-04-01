@@ -3,7 +3,7 @@
         {
             "add": 1,
             "sub": 1,
-            "mul": 1,
+            "mul": 3,
             "div": 1,
             "addi": 1,
             "li": 1,
@@ -20,5 +20,13 @@
         }
     ],
     "memory": 4096,
-    "forwarding": true
+    "forwarding": true,
+    "l1i":16,
+    "l1d":16,
+    "l2":64,
+    "bsize":8,
+    "crp":0,
+    "l1lat":3,
+    "l2lat":6,
+    "memlat":10
 }

@@ -20,7 +20,8 @@ inner_loop:
 sub x13 x12 x2
 beqz x13 next_outer
 
-mul x14 x2 4
+li x14 4
+mul x14 x2 x14
 add x15 x10 x14
 
 lw x3 0(x15)

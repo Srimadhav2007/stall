@@ -16,11 +16,11 @@ union Register{
 struct IF_IDRF{
 	int pc;
 	bool valid;
-	vector<string> instpieces;
+	int instruction;
 	IF_IDRF(){
 		pc = 0;
 		valid = false;
-		instpieces.clear();
+		instruction=INT32_MAX;
 	}
 };
 
