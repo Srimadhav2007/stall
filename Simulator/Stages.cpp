@@ -23,7 +23,11 @@ void Core::IF(){
         pr1.valid=false;
         return;
     }
-    pr1.instruction=instructions[pc];
+    //pr1.instruction=instructions[pc];
+    auto instdata=LRUl(true,true,pc*4,4);
+    pr1.instruction=((instdata[0]&0xFF)<<0)|((instdata[1]&0xFF)<<8)|((instdata[2]&0xFF)<<16)|((instdata[3]&0xFF)<<24);
+    //cout<<"inst actual: "<<instructions[pc]<<", fetched: "<<pr1.instruction<<endl;
+    delete[] instdata;
     num_instructions++;
     pr1.pc=pc;
     pc++;
@@ -253,20 +257,29 @@ void Core::MEM(){
             pr4.aluResult = 0;
             pr4.RegWrite = false;
         } else {
-            pr4.aluResult=(unsigned char)memory[pr3.aluResult]
+            /*pr4.aluResult=(unsigned char)memory[pr3.aluResult]
                         |(unsigned char)memory[pr3.aluResult+1]<<8
                         |(unsigned char)memory[pr3.aluResult+2]<<16
-                        |(unsigned char)memory[pr3.aluResult+3]<<24;
+                        |(unsigned char)memory[pr3.aluResult+3]<<24;*/
+            auto data=LRUl(true,false,pr3.aluResult,4);
+            pr4.aluResult=(data[0])|(data[1]<<8)|(data[2]<<16)|(data[3]<<24);
+            delete[] data;
         }
     }
     else if(pr3.MemWrite){
         if(pr3.aluResult < 0 || pr3.aluResult + 3 >= memsize){
             cerr << "Memory write out of bounds: addr=" << pr3.aluResult << " pc=" << pr3.pc << endl;
         } else {
-            memory[pr3.aluResult]  = pr3.rs2val & 0xFF;
+            /*memory[pr3.aluResult]  = pr3.rs2val & 0xFF;
             memory[pr3.aluResult+1]=(pr3.rs2val >> 8)  & 0xFF;
             memory[pr3.aluResult+2]=(pr3.rs2val >> 16) & 0xFF;
-            memory[pr3.aluResult+3]=(pr3.rs2val >> 24) & 0xFF;
+            memory[pr3.aluResult+3]=(pr3.rs2val >> 24) & 0xFF;*/
+            char* data=new char[4];
+            data[0]=pr3.rs2val & 0xFF;
+            data[1]=(pr3.rs2val >> 8)  & 0xFF;
+            data[2]=(pr3.rs2val >> 16)  & 0xFF;
+            data[3]=(pr3.rs2val >> 24)  & 0xFF;
+            LRUs(true,false,pr3.aluResult,4,data);
         }
     }
     else {
@@ -283,18 +296,578 @@ void Core::WB(){
     }
 }
 
-void Core::LRU(bool isl1,bool isi,int tag){
-    if(isl1&&isi){
-        
+char* Core::LRUl(bool isl1, bool isi, int tag, int numbytes) {
+    if(isl1 && isi){
+        mem_stalls += l1llat;
+        //cout<<"tag="<<tag<<", added "<<l1llat<<"at l1"<<endl;
+        int ind = ((tag / bsize) * bsize) % numsetsl1;
+        int empty = -1;
+        for(int i = 0; i < l1i.numblocks; i++){
+            if(l1i.sets[ind].blocks[i].tag == (tag / bsize) * bsize){
+                char* ret = new char[numbytes];
+                memcpy(ret, l1i.sets[ind].blocks[i].bytes + tag % bsize, numbytes);
+                if(lrut1i.table[ind][i] != 0){
+                    for(int j = 0; j < lrut1i.blocksperset; j++){
+                        if(lrut1i.table[ind][j] < lrut1i.table[ind][i]) lrut1i.table[ind][j]++;
+                    }
+                    lrut1i.table[ind][i] = 0;
+                }
+                return ret;
+            }
+            if(l1i.sets[ind].blocks[i].tag == -1 && empty == -1) empty = i;
+        }
+        // Miss — fetch from L2, passing isi=true so L2 knows it's instruction
+        if(empty == -1){
+            char* ret = new char[numbytes];
+            auto retd = LRUl(false, true, (tag / bsize) * bsize, bsize);
+            int slot = -1;
+            for(int i = 0; i < lrut1i.blocksperset; i++){
+                lrut1i.table[ind][i]++;
+                if(lrut1i.table[ind][i] == lrut1i.blocksperset) slot = i;
+            }
+            lrut1i.table[ind][slot] = 0;
+            l1i.sets[ind].blocks[slot].tag = (tag / bsize) * bsize;
+            l1i.sets[ind].blocks[slot].isinst = true;
+            memcpy(l1i.sets[ind].blocks[slot].bytes, retd, bsize);
+            memcpy(ret, l1i.sets[ind].blocks[slot].bytes + tag % bsize, numbytes);
+            delete[] retd;
+            return ret;
+        }
+        else{
+            char* ret = new char[numbytes];
+            auto retd = LRUl(false, true, (tag / bsize) * bsize, bsize);
+            l1i.sets[ind].blocks[empty].tag = (tag / bsize) * bsize;
+            l1i.sets[ind].blocks[empty].isinst = true;
+            for(int i = 0; i < lrut1i.blocksperset; i++){
+                if(lrut1i.table[ind][i] > -1) lrut1i.table[ind][i]++;
+            }
+            lrut1i.table[ind][empty] = 0;
+            memcpy(l1i.sets[ind].blocks[empty].bytes, retd, bsize);
+            memcpy(ret, l1i.sets[ind].blocks[empty].bytes + tag % bsize, numbytes);
+            delete[] retd;
+            return ret;
+        }
     }
-    else if(isl1&&!isi){
-
+    else if(isl1 && !isi){
+        mem_stalls += l1llat;
+        //cout<<"tag="<<tag<<", added "<<l1llat<<"at l1"<<endl;
+        int ind = ((tag / bsize) * bsize) % numsetsl1;
+        int empty = -1;
+        for(int i = 0; i < l1d.numblocks; i++){
+            if(l1d.sets[ind].blocks[i].tag == (tag / bsize) * bsize){
+                char* ret = new char[numbytes];
+                memcpy(ret, l1d.sets[ind].blocks[i].bytes + tag % bsize, numbytes);
+                if(lrut1d.table[ind][i] != 0){
+                    for(int j = 0; j < lrut1d.blocksperset; j++){
+                        if(lrut1d.table[ind][j] < lrut1d.table[ind][i]) lrut1d.table[ind][j]++;
+                    }
+                    lrut1d.table[ind][i] = 0;
+                }
+                return ret;
+            }
+            if(l1d.sets[ind].blocks[i].tag == -1 && empty == -1) empty = i;
+        }
+        // Miss — fetch from L2, isi=false for data
+        if(empty == -1){
+            char* ret = new char[numbytes];
+            auto retd = LRUl(false, false, (tag / bsize) * bsize, bsize);
+            int slot = -1;
+            for(int i = 0; i < lrut1d.blocksperset; i++){
+                lrut1d.table[ind][i]++;
+                if(lrut1d.table[ind][i] == lrut1d.blocksperset) slot = i;
+            }
+            lrut1d.table[ind][slot] = 0;
+            l1d.sets[ind].blocks[slot].tag = (tag / bsize) * bsize;
+            l1d.sets[ind].blocks[slot].isinst = false;
+            memcpy(l1d.sets[ind].blocks[slot].bytes, retd, bsize);
+            memcpy(ret, l1d.sets[ind].blocks[slot].bytes + tag % bsize, numbytes);
+            delete[] retd;
+            return ret;
+        }
+        else{
+            char* ret = new char[numbytes];
+            auto retd = LRUl(false, false, (tag / bsize) * bsize, bsize);
+            l1d.sets[ind].blocks[empty].tag = (tag / bsize) * bsize;
+            l1d.sets[ind].blocks[empty].isinst = false;
+            for(int i = 0; i < lrut1d.blocksperset; i++){
+                if(lrut1d.table[ind][i] > -1) lrut1d.table[ind][i]++;
+            }
+            lrut1d.table[ind][empty] = 0;
+            memcpy(l1d.sets[ind].blocks[empty].bytes, retd, bsize);
+            memcpy(ret, l1d.sets[ind].blocks[empty].bytes + tag % bsize, numbytes);
+            delete[] retd;
+            return ret;
+        }
     }
     else{
-
+        // L2 unified — isi tells us whether to fetch from instructions[] or memory[]
+        mem_stalls += l2llat;
+        //cout<<"tag="<<tag<<", added "<<l2llat<<"at l2"<<endl;
+        int ind = ((tag / bsize) * bsize) % numsetsl2;
+        int empty = -1;
+        for(int i = 0; i < l2.numblocks; i++){
+            if(l2.sets[ind].blocks[i].tag == (tag / bsize) * bsize &&
+               l2.sets[ind].blocks[i].isinst == isi){
+                char* ret = new char[numbytes];
+                memcpy(ret, l2.sets[ind].blocks[i].bytes + tag % bsize, numbytes);
+                if(lrut2.table[ind][i] != 0){
+                    for(int j = 0; j < lrut2.blocksperset; j++){
+                        if(lrut2.table[ind][j] < lrut2.table[ind][i]) lrut2.table[ind][j]++;
+                    }
+                    lrut2.table[ind][i] = 0;
+                }
+                return ret;
+            }
+            if(l2.sets[ind].blocks[i].tag == -1 && empty == -1) empty = i;
+        }
+        mem_stalls += memllat;
+        //cout<<"tag="<<tag<<", added "<<memllat<<"at mem"<<endl;
+        // Helper lambda to fill a block from backing store
+        auto fillBlock = [&](char* blockBytes) {
+            if(isi){
+                int startInst = tag / 4;
+                for(int i = 0; i < bsize / 4; i++){
+                    int idx = startInst + i;
+                    if(idx >= (int)instructions.size()) break;
+                    int inst = instructions[idx];
+                    blockBytes[4*i+0] =  inst        & 0xFF;
+                    blockBytes[4*i+1] = (inst >>  8) & 0xFF;
+                    blockBytes[4*i+2] = (inst >> 16) & 0xFF;
+                    blockBytes[4*i+3] = (inst >> 24) & 0xFF;
+                }
+            }
+            else{
+                memcpy(blockBytes, memory + (tag / bsize) * bsize, bsize);
+            }
+        };
+        if(empty == -1){
+            int slot = -1;
+            for(int i = 0; i < lrut2.blocksperset; i++){
+                lrut2.table[ind][i]++;
+                if(lrut2.table[ind][i] == lrut2.blocksperset) slot = i;
+            }
+            lrut2.table[ind][slot] = 0;
+            l2.sets[ind].blocks[slot].tag = (tag / bsize) * bsize;
+            l2.sets[ind].blocks[slot].isinst = isi;
+            fillBlock(l2.sets[ind].blocks[slot].bytes);
+            char* ret = new char[numbytes];
+            memcpy(ret, l2.sets[ind].blocks[slot].bytes + tag % bsize, numbytes);
+            return ret;
+        }
+        else{
+            l2.sets[ind].blocks[empty].tag = (tag / bsize) * bsize;
+            l2.sets[ind].blocks[empty].isinst = isi;
+            fillBlock(l2.sets[ind].blocks[empty].bytes);
+            for(int i = 0; i < lrut2.blocksperset; i++){
+                if(lrut2.table[ind][i] > -1) lrut2.table[ind][i]++;
+            }
+            lrut2.table[ind][empty] = 0;
+            char* ret = new char[numbytes];
+            memcpy(ret, l2.sets[ind].blocks[empty].bytes + tag % bsize, numbytes);
+            return ret;
+        }
     }
 }
 
-void Core::PLRU(bool isl1,bool isi,int tag){
-    
+void Core::LRUs(bool isl1, bool isi, int tag, int numbytes, char* data) {
+    if(isl1 && isi){
+        delete[] data;
+        return;
+    }
+    else if(isl1 && !isi){
+        mem_stalls += l1slat;
+        int ind = ((tag / bsize) * bsize) % numsetsl1;
+        int empty = -1;
+        for(int i = 0; i < l1d.numblocks; i++){
+            if(l1d.sets[ind].blocks[i].tag == (tag / bsize) * bsize){
+                memcpy(l1d.sets[ind].blocks[i].bytes + tag % bsize, data, numbytes);
+                if(lrut1d.table[ind][i] != 0){
+                    for(int j = 0; j < lrut1d.blocksperset; j++){
+                        if(lrut1d.table[ind][j] < lrut1d.table[ind][i]) lrut1d.table[ind][j]++;
+                    }
+                    lrut1d.table[ind][i] = 0;
+                }
+                LRUs(false, false, (tag / bsize) * bsize, numbytes, data);
+                return;
+            }
+            if(l1d.sets[ind].blocks[i].tag == -1 && empty == -1) empty = i;
+        }
+        if(empty == -1){
+            auto retd = LRUl(false, false, (tag / bsize) * bsize, bsize);
+            int slot = -1;
+            for(int i = 0; i < lrut1d.blocksperset; i++){
+                lrut1d.table[ind][i]++;
+                if(lrut1d.table[ind][i] == lrut1d.blocksperset) slot = i;
+            }
+            lrut1d.table[ind][slot] = 0;
+            l1d.sets[ind].blocks[slot].tag = (tag / bsize) * bsize;
+            l1d.sets[ind].blocks[slot].isinst = false;
+            memcpy(l1d.sets[ind].blocks[slot].bytes, retd, bsize);
+            memcpy(l1d.sets[ind].blocks[slot].bytes + tag % bsize, data, numbytes);
+            memcpy(retd + tag % bsize, data, numbytes);
+            LRUs(false, false, (tag / bsize) * bsize, bsize, retd);
+            delete[] data;
+        }
+        else{
+            auto retd = LRUl(false, false, (tag / bsize) * bsize, bsize);
+            l1d.sets[ind].blocks[empty].tag = (tag / bsize) * bsize;
+            l1d.sets[ind].blocks[empty].isinst = false;
+            for(int i = 0; i < lrut1d.blocksperset; i++){
+                if(lrut1d.table[ind][i] > -1) lrut1d.table[ind][i]++;
+            }
+            lrut1d.table[ind][empty] = 0;
+            memcpy(l1d.sets[ind].blocks[empty].bytes, retd, bsize);
+            memcpy(l1d.sets[ind].blocks[empty].bytes + tag % bsize, data, numbytes);
+            memcpy(retd + tag % bsize, data, numbytes);
+            LRUs(false, false, (tag / bsize) * bsize, bsize, retd);
+            delete[] data;
+        }
+    }
+    else{
+        mem_stalls += l2slat;
+        int ind = ((tag / bsize) * bsize) % numsetsl2;
+        int empty = -1;
+        for(int i = 0; i < l2.numblocks; i++){
+            if(l2.sets[ind].blocks[i].tag == (tag / bsize) * bsize &&
+               l2.sets[ind].blocks[i].isinst == isi){
+                memcpy(l2.sets[ind].blocks[i].bytes + tag % bsize, data, numbytes);
+                if(lrut2.table[ind][i] != 0){
+                    for(int j = 0; j < lrut2.blocksperset; j++){
+                        if(lrut2.table[ind][j] < lrut2.table[ind][i]) lrut2.table[ind][j]++;
+                    }
+                    lrut2.table[ind][i] = 0;
+                }
+                memcpy(memory + tag, data, numbytes);
+                delete[] data;
+                return;
+            }
+            if(l2.sets[ind].blocks[i].tag == -1 && empty == -1) empty = i;
+        }
+        mem_stalls += memslat;
+        if(empty == -1){
+            int slot = -1;
+            for(int i = 0; i < lrut2.blocksperset; i++){
+                lrut2.table[ind][i]++;
+                if(lrut2.table[ind][i] == lrut2.blocksperset) slot = i;
+            }
+            lrut2.table[ind][slot] = 0;
+            memcpy(l2.sets[ind].blocks[slot].bytes, memory + (tag / bsize) * bsize, bsize);
+            memcpy(l2.sets[ind].blocks[slot].bytes + tag % bsize, data, numbytes);
+            memcpy(memory + tag, data, numbytes);
+            l2.sets[ind].blocks[slot].tag = (tag / bsize) * bsize;
+            l2.sets[ind].blocks[slot].isinst = false;
+            delete[] data;
+        }
+        else{
+            for(int i = 0; i < lrut2.blocksperset; i++){
+                if(lrut2.table[ind][i] > -1) lrut2.table[ind][i]++;
+            }
+            lrut2.table[ind][empty] = 0;
+            memcpy(l2.sets[ind].blocks[empty].bytes, memory + (tag / bsize) * bsize, bsize);
+            memcpy(l2.sets[ind].blocks[empty].bytes + tag % bsize, data, numbytes);
+            memcpy(memory + tag, data, numbytes);
+            l2.sets[ind].blocks[empty].tag = (tag / bsize) * bsize;
+            l2.sets[ind].blocks[empty].isinst = false;
+            delete[] data;
+        }
+    }
 }
+
+/*char* Core::LRUl(bool isl1,bool isi,int tag,int numbytes){
+    if(isl1&&isi){
+        mem_stalls+=l1llat;
+        int ind=((tag/bsize)*bsize)%numsetsl1;
+        int empty=-1;
+        for(int i=0;i<l1i.numblocks;i++){
+            if(l1i.sets[ind].blocks[i].tag==(tag/bsize)*bsize){
+                char* ret=new char[numbytes];
+                memcpy(ret,l1i.sets[ind].blocks[i].bytes+tag%bsize,numbytes);
+                if(lrut1i.table[ind][i]!=0){
+                    for(int j=0;j<lrut1i.blocksperset;j++){
+                        if(lrut1i.table[ind][j]<lrut1i.table[ind][i])lrut1i.table[ind][j]++;
+                    }
+                    lrut1i.table[ind][i]=0;
+                }
+                return ret;
+            }
+            if(l1i.sets[ind].blocks[i].tag==-1&&empty==-1)empty=i;
+        }
+        if(empty==-1){
+            char* ret=new char[numbytes];
+            auto retd=LRUl(false,false,-1*(tag/bsize)*bsize,bsize);
+            int slot=-1;
+            for(int i=0;i<lrut1i.blocksperset;i++){
+                lrut1i.table[ind][i]++;
+                if(lrut1i.table[ind][i]==lrut1i.blocksperset)slot=i;
+            }
+            lrut1i.table[ind][slot]=0;
+            l1i.sets[ind].blocks[slot].tag=(tag/bsize)*bsize;
+            memcpy(l1i.sets[ind].blocks[slot].bytes,retd,bsize);
+            memcpy(ret,l1i.sets[ind].blocks[slot].bytes+tag%bsize,numbytes);
+            delete[] retd;
+            return ret;
+        }
+        else{
+            char* ret=new char[numbytes];
+            auto retd=LRUl(false,false,-1*(tag/bsize)*bsize,bsize);
+            l1i.sets[ind].blocks[empty].tag=(tag/bsize)*bsize;
+            for(int i=0;i<lrut1i.blocksperset;i++){
+                if(lrut1i.table[ind][i]>-1){
+                    lrut1i.table[ind][i]++;
+                }
+            }
+            lrut1i.table[ind][empty]=0;
+            memcpy(l1i.sets[ind].blocks[empty].bytes,retd,bsize);
+            memcpy(ret,l1i.sets[ind].blocks[empty].bytes+tag%bsize,numbytes);
+            delete[] retd;
+            return ret;
+        }
+    }
+    else if(isl1&&!isi){
+        mem_stalls+=l1llat;
+        int ind=((tag/bsize)*bsize)%numsetsl1;
+        int empty=-1;
+        for(int i=0;i<l1d.numblocks;i++){
+            if(l1d.sets[ind].blocks[i].tag==(tag/bsize)*bsize){
+                char* ret=new char[numbytes];
+                memcpy(ret,l1d.sets[ind].blocks[i].bytes+tag%bsize,numbytes);
+                if(lrut1d.table[ind][i]!=0){
+                    for(int j=0;j<lrut1d.blocksperset;j++){
+                        if(lrut1d.table[ind][j]<lrut1d.table[ind][i])lrut1d.table[ind][j]++;
+                    }
+                    lrut1d.table[ind][i]=0;
+                }
+                return ret;
+            }
+            if(l1d.sets[ind].blocks[i].tag==-1&&empty==-1)empty=i;
+        }
+        if(empty==-1){
+            char* ret=new char[numbytes];
+            auto retd=LRUl(false,false,(tag/bsize)*bsize,bsize);
+            int slot=-1;
+            for(int i=0;i<lrut1d.blocksperset;i++){
+                lrut1d.table[ind][i]++;
+                if(lrut1d.table[ind][i]==lrut1d.blocksperset)slot=i;
+            }
+            lrut1d.table[ind][slot]=0;
+            l1d.sets[ind].blocks[slot].tag=(tag/bsize)*bsize;
+            memcpy(l1d.sets[ind].blocks[slot].bytes,retd,bsize);
+            memcpy(ret,l1d.sets[ind].blocks[slot].bytes+tag%bsize,numbytes);
+            delete[] retd;
+            return ret;
+        }
+        else{
+            char* ret=new char[numbytes];
+            auto retd=LRUl(false,false,(tag/bsize)*bsize,bsize);
+            l1d.sets[ind].blocks[empty].tag=(tag/bsize)*bsize;
+            for(int i=0;i<lrut1d.blocksperset;i++){
+                if(lrut1d.table[ind][i]>-1){
+                    lrut1d.table[ind][i]++;
+                }
+            }
+            lrut1d.table[ind][empty]=0;
+            memcpy(l1d.sets[ind].blocks[empty].bytes,retd,bsize);
+            memcpy(ret,l1d.sets[ind].blocks[empty].bytes+tag%bsize,numbytes);
+            delete[] retd;
+            return ret;
+        }
+    }
+    else{
+        mem_stalls+=l1llat;
+        int ind=((abs(tag)/bsize)*bsize)%numsetsl2;
+        int empty=-1;
+        for(int i=0;i<l2.numblocks;i++){
+            if(l2.sets[ind].blocks[i].tag==(tag/bsize)*bsize){
+                char* ret=new char[numbytes];
+                memcpy(ret,l2.sets[ind].blocks[i].bytes+abs(tag)%bsize,numbytes);
+                if(lrut2.table[ind][i]!=0){
+                    for(int j=0;j<lrut2.blocksperset;j++){
+                        if(lrut2.table[ind][j]<lrut2.table[ind][i])lrut2.table[ind][j]++;
+                    }
+                    lrut2.table[ind][i]=0;
+                }
+                return ret;
+            }
+            if(l2.sets[ind].blocks[i].tag==-1&&empty==-1)empty=i;
+        }
+        mem_stalls+=memllat;
+        if(empty==-1){
+            if(tag<0){
+                char* ret=new char[numbytes];
+                int startInst = (-1 * tag) / 4;   // convert byte address → instruction index
+                for(int i = 0; i < bsize / 4; i++){
+                    int idx = startInst + i;
+                    if(idx >= (int)instructions.size()) break;
+                    int inst = instructions[idx];
+                    ret[4*i+0] =  inst        & 0xFF;
+                    ret[4*i+1] = (inst >>  8) & 0xFF;
+                    ret[4*i+2] = (inst >> 16) & 0xFF;
+                    ret[4*i+3] = (inst >> 24) & 0xFF;
+                }
+                int slot=-1;
+                for(int i=0;i<lrut2.blocksperset;i++){
+                    lrut2.table[ind][i]++;
+                    if(lrut2.table[ind][i]==lrut2.blocksperset)slot=i;
+                }
+                lrut2.table[ind][slot]=0;
+                memcpy(l2.sets[ind].blocks[slot].bytes,ret,bsize);
+                l2.sets[ind].blocks[slot].tag = (tag / bsize) * bsize;
+                return ret;
+            }
+            else{
+                char* ret=new char[numbytes];
+                int slot=-1;
+                for(int i=0;i<lrut2.blocksperset;i++){
+                    lrut2.table[ind][i]++;
+                    if(lrut2.table[ind][i]==lrut2.blocksperset)slot=i;
+                }
+                lrut2.table[ind][slot]=0;
+                memcpy(l2.sets[ind].blocks[slot].bytes,memory+(tag/bsize)*bsize,bsize);
+                memcpy(ret, l2.sets[ind].blocks[slot].bytes + tag % bsize, numbytes);
+                l2.sets[ind].blocks[slot].tag = (tag / bsize) * bsize;
+                return ret;
+            }
+        }
+        else{
+            if(tag<0){
+                char* ret=new char[numbytes];
+                int startInst = (-1 * tag) / 4;   // convert byte address → instruction index
+                for(int i = 0; i < bsize / 4; i++){
+                    int idx = startInst + i;
+                    if(idx >= (int)instructions.size()) break;
+                    int inst = instructions[idx];
+                    ret[4*i+0] =  inst        & 0xFF;
+                    ret[4*i+1] = (inst >>  8) & 0xFF;
+                    ret[4*i+2] = (inst >> 16) & 0xFF;
+                    ret[4*i+3] = (inst >> 24) & 0xFF;
+                }
+                for(int i=0;i<lrut2.blocksperset;i++){
+                    if(lrut2.table[ind][i]>-1){
+                        lrut2.table[ind][i]++;
+                    }
+                }
+                lrut2.table[ind][empty]=0;
+                memcpy(l2.sets[ind].blocks[empty].bytes,ret,bsize);
+                l2.sets[ind].blocks[empty].tag = (tag / bsize) * bsize;
+                return ret;
+            }
+            else{
+                char* ret=new char[numbytes];
+                for(int i=0;i<lrut2.blocksperset;i++){
+                    if(lrut2.table[ind][i]>-1){
+                        lrut2.table[ind][i]++;
+                    }
+                }
+                lrut2.table[ind][empty]=0;
+                memcpy(l2.sets[ind].blocks[empty].bytes,memory+(tag/bsize)*bsize,bsize);
+                memcpy(ret, l2.sets[ind].blocks[empty].bytes + tag % bsize, numbytes);
+                l2.sets[ind].blocks[empty].tag = (tag / bsize) * bsize;
+                return ret;
+            }
+        }
+    }
+}
+
+void Core::LRUs(bool isl1, bool isi, int tag, int numbytes, char* data) {
+    if(isl1 && isi){
+        // Instruction cache is read-only, stores don't apply
+        delete[] data;
+        return;
+    }
+    else if(isl1 && !isi){
+        mem_stalls += l1slat;
+        int ind = ((tag / bsize) * bsize) % numsetsl1;
+        int empty = -1;
+        for(int i = 0; i < l1d.numblocks; i++){
+            if(l1d.sets[ind].blocks[i].tag == (tag / bsize) * bsize){
+                // Hit — write to block, promote to MRU
+                memcpy(l1d.sets[ind].blocks[i].bytes + tag % bsize, data, numbytes);
+                if(lrut1d.table[ind][i] != 0){
+                    for(int j = 0; j < lrut1d.blocksperset; j++){
+                        if(lrut1d.table[ind][j] < lrut1d.table[ind][i]) lrut1d.table[ind][j]++;
+                    }
+                    lrut1d.table[ind][i] = 0;
+                }
+                LRUs(false,false,(tag/bsize)*bsize,numbytes,data);
+                return;
+            }
+            if(l1d.sets[ind].blocks[i].tag == -1 && empty == -1) empty = i;
+        }
+        // Miss — write-allocate: fetch block, then write data into it
+        if(empty == -1){
+            auto retd = LRUl(false, false, (tag / bsize) * bsize, bsize);
+            int slot = -1;
+            for(int i = 0; i < lrut1d.blocksperset; i++){
+                lrut1d.table[ind][i]++;
+                if(lrut1d.table[ind][i] == lrut1d.blocksperset) slot = i;
+            }
+            lrut1d.table[ind][slot] = 0;
+            l1d.sets[ind].blocks[slot].tag = (tag / bsize) * bsize;
+            memcpy(l1d.sets[ind].blocks[slot].bytes, retd, bsize);
+            memcpy(l1d.sets[ind].blocks[slot].bytes + tag % bsize, data, numbytes);
+            memcpy(retd+tag%bsize,data,numbytes);
+            LRUs(false,false,(tag/bsize)*bsize,bsize,retd);
+            delete[] data;
+        }
+        else{
+            auto retd = LRUl(false, false, (tag / bsize) * bsize, bsize);
+            l1d.sets[ind].blocks[empty].tag = (tag / bsize) * bsize;
+            for(int i = 0; i < lrut1d.blocksperset; i++){
+                if(lrut1d.table[ind][i] > -1) lrut1d.table[ind][i]++;
+            }
+            lrut1d.table[ind][empty] = 0;
+            memcpy(l1d.sets[ind].blocks[empty].bytes, retd, bsize);
+            memcpy(l1d.sets[ind].blocks[empty].bytes + tag % bsize, data, numbytes);
+            memcpy(retd+tag%bsize,data,numbytes);
+            LRUs(false,false,(tag/bsize)*bsize,bsize,retd);
+            delete[] data;
+        }
+    }
+    else{
+        mem_stalls += l2slat;
+        int ind = ((abs(tag) / bsize) * bsize) % numsetsl2;
+        int empty = -1;
+        for(int i = 0; i < l2.numblocks; i++){
+            if(l2.sets[ind].blocks[i].tag == (tag / bsize) * bsize){
+                // Hit — write to block, promote to MRU
+                memcpy(l2.sets[ind].blocks[i].bytes + abs(tag) % bsize, data, numbytes);
+                if(lrut2.table[ind][i] != 0){
+                    for(int j = 0; j < lrut2.blocksperset; j++){
+                        if(lrut2.table[ind][j] < lrut2.table[ind][i]) lrut2.table[ind][j]++;
+                    }
+                    lrut2.table[ind][i] = 0;
+                }
+                memcpy(memory+tag,data,numbytes);
+                delete[] data;
+                return;
+            }
+            if(l2.sets[ind].blocks[i].tag == -1 && empty == -1) empty = i;
+        }
+        mem_stalls += memslat;
+        // Miss — write-allocate: fetch block from memory, then write data into it
+        if(empty == -1){
+            int slot = -1;
+            for(int i = 0; i < lrut2.blocksperset; i++){
+                lrut2.table[ind][i]++;
+                if(lrut2.table[ind][i] == lrut2.blocksperset) slot = i;
+            }
+            lrut2.table[ind][slot] = 0;
+            memcpy(l2.sets[ind].blocks[slot].bytes, memory + (tag / bsize) * bsize, bsize);
+            memcpy(l2.sets[ind].blocks[slot].bytes + tag % bsize, data, numbytes);
+            memcpy(memory + tag, data, numbytes);
+            l2.sets[ind].blocks[slot].tag = (tag / bsize) * bsize;
+            delete[] data;
+        }
+        else{
+            for(int i = 0; i < lrut2.blocksperset; i++){
+                if(lrut2.table[ind][i] > -1) lrut2.table[ind][i]++;
+            }
+            lrut2.table[ind][empty] = 0;
+            memcpy(l2.sets[ind].blocks[empty].bytes, memory + (tag / bsize) * bsize, bsize);
+            memcpy(l2.sets[ind].blocks[empty].bytes + tag % bsize, data, numbytes);
+            memcpy(memory + tag, data, numbytes);
+            l2.sets[ind].blocks[empty].tag = (tag / bsize) * bsize;
+            delete[] data;
+        }
+    }
+}*/

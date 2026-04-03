@@ -21,12 +21,19 @@
     ],
     "memory": 4096,
     "forwarding": true,
+
     "l1i":16,
     "l1d":16,
     "l2":64,
     "bsize":8,
+    "sets1":1,
+    "sets2":1,
     "crp":0,
-    "l1lat":3,
-    "l2lat":6,
-    "memlat":10
+
+    "l1llat":3,
+    "l2llat":6,
+    "memllat":10,
+    "l1slat":3,
+    "l2slat":6,
+    "memslat":10
 }

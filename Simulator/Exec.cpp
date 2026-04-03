@@ -7,6 +7,7 @@ void Core::execConfig(string& program){
     nextdatastart = 0;
     ipc = 0.0f;
     num_stalls = 0;
+    mem_stalls=0;
     num_instructions=0;
 
     for(int i = 0; i < 32; i++)
@@ -213,7 +214,6 @@ void Core::AssemblyToMachineCode(vector<string>& insts){
 void Core::Parse(stringstream& ss){
     string line;
     bool indata = false;
-    //vector<string> insts;
     while(getline(ss, line)){
         if(!line.empty()){
             if(line==".data"){ indata = true; continue; }
@@ -291,10 +291,16 @@ vector<int> Core::execute(string& program){
         else num_stalls++;
         clock++;
     }
-    clock+=num_stalls;
+    clock+=num_stalls+mem_stalls;
     ipc=(float)num_instructions/(float)clock;
     for(int i = 0; i < 32; i++) cout<<registers[i].i<<" ";
     cout<<endl;
-    cout<<"Clock="<<clock<<"\tTotal Stalls="<<num_stalls<<"\tInstructions run="<<num_instructions<<"\tIPC="<<ipc<<endl;
+    cout<<"Clock="<<clock<<"\tEx Stalls="<<num_stalls<<"\tMem Stalls="<<mem_stalls<<"\tInstructions run="<<num_instructions<<"\tIPC="<<ipc<<endl;
+    l1i.ground();
+    l1d.ground();
+    l2.ground();
+    lrut1i.ground();
+    lrut1d.ground();
+    lrut2.ground();
     return {(int)num_instructions,clock,num_stalls};
 }

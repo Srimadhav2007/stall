@@ -9,14 +9,11 @@
 #include <fstream>
 #include "json.hpp"
 #include "Registers.hpp"
+#include "Cache.hpp"
 
 using namespace std;
 using json = nlohmann::json;
 
-struct L2Tag{
-    bool isinst;
-    int tag;
-};
 
 class Core{
 private:
@@ -32,6 +29,7 @@ private:
     int latency_acc;
     float ipc;
     int num_stalls;
+    int mem_stalls;
     int nextdatastart;
     int num_instructions;
 
@@ -41,18 +39,29 @@ private:
     bool forwarding;
     vector<int> latencies;
     char* memory;
-    int* l1it;
-    int* l1dt;
-    L2Tag* l2t;
-    char* l1i;
-    char* l1d;
-    char* l2;
     int memsize;
+
     int l1isize;
     int l1dsize;
     int l2size;
     int bsize;
+    int numsetsl1;
+    int numsetsl2;
     int crp;
+    int bpsl1;
+    int bpsl2;
+    Cache l1i;
+    Cache l1d;
+    Cache l2;
+    LRUTable lrut1i;
+    LRUTable lrut1d;
+    LRUTable lrut2;
+    int l1llat;
+    int l2llat;
+    int memllat;
+    int l1slat;
+    int l2slat;
+    int memslat;
 
     IF_IDRF pr1;
     IDRF_EX pr2;
@@ -76,8 +85,9 @@ private:
     void Parse(stringstream& ss);
     void AssemblyToMachineCode(vector<string>& insts);
 
-    void LRU(bool isl1,bool isi,int tag);
-    void PLRU(bool isl1,bool isi,int tag);
+    char* LRUl(bool isl1,bool isi,int tag,int numbytes);
+    void LRUs(bool isl1,bool isi,int tag,int numbytes,char* data);
+    char* PLRU(bool isl1,bool isi,int tag,int numbytes);
 
 public:
     Core();
