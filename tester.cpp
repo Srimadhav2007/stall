@@ -157,16 +157,19 @@ nonzero: add x4 x3 x3
 end:     addi x1 x0 4
 )"},
 
-{"SW/LW with arithmetic",
-R"(addi x1 x0 6
-addi x2 x0 7
-mul x3 x1 x2
-sw x3 0(x0)
-lw x4 0(x0)
-add x5 x4 x3
-)"},
-
-    };
+{"Check for differences in cache behavior",
+R"(li x3 0   
+li x4 8     
+li x5 16 
+lw x6 0(x0) 
+lw x7 0(x4)
+lw x8 0(x5) 
+lw x7 0(x1) 
+lw x6 0(x0) 
+lw x8 0(x2) 
+lw x6 0(x0) 
+lw x7 0(x1)"}
+};
 
     int passed = 0;
     for(int i = 0; i < (int)programs.size(); i++){

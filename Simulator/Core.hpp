@@ -53,9 +53,19 @@ private:
     Cache l1i;
     Cache l1d;
     Cache l2;
+    
     LRUTable lrut1i;
     LRUTable lrut1d;
     LRUTable lrut2;
+    char* LRUl(bool isl1,bool isi,int tag,int numbytes);
+    void LRUs(bool isl1,bool isi,int tag,int numbytes,char* data);
+    
+    PLRUTable plrut1i;
+    PLRUTable plrut1d;
+    PLRUTable plrut2;
+    char* PLRUl(bool isl1,bool isi,int tag,int numbytes);   // ADD — load
+    void  PLRUs(bool isl1,bool isi,int tag,int numbytes,char* data); // ADD — store
+
     int l1llat;
     int l2llat;
     int memllat;
@@ -85,9 +95,7 @@ private:
     void Parse(stringstream& ss);
     void AssemblyToMachineCode(vector<string>& insts);
 
-    char* LRUl(bool isl1,bool isi,int tag,int numbytes);
-    void LRUs(bool isl1,bool isi,int tag,int numbytes,char* data);
-    char* PLRU(bool isl1,bool isi,int tag,int numbytes);
+    
 
 public:
     Core();

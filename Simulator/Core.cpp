@@ -28,9 +28,17 @@ Core::Core(){
 	l1i.init(numsetsl1,bpsl1,bsize);
 	l1d.init(numsetsl1,bpsl1,bsize);
 	l2.init(numsetsl2,bpsl2,bsize);
+	
+	if(crp==0){ 
 	lrut1i.init(numsetsl1,bpsl1);
 	lrut1d.init(numsetsl1,bpsl1);
 	lrut2.init(numsetsl2,bpsl2);
+	}
+	else{
+	plrut1i.init(numsetsl1,bpsl1); 
+	plrut1d.init(numsetsl1,bpsl1); 
+	plrut2.init(numsetsl2,bpsl2); 
+	}
 
 	opcodes["add"]=0;
 	opcodes["sub"]=1;

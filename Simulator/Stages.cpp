@@ -24,7 +24,7 @@ void Core::IF(){
         return;
     }
     //pr1.instruction=instructions[pc];
-    auto instdata=LRUl(true,true,pc*4,4);
+    auto instdata = crp ? PLRUl(true,true,pc*4,4) : LRUl(true,true,pc*4,4);
     pr1.instruction=((instdata[0]&0xFF)<<0)|((instdata[1]&0xFF)<<8)|((instdata[2]&0xFF)<<16)|((instdata[3]&0xFF)<<24);
     //cout<<"inst actual: "<<instructions[pc]<<", fetched: "<<pr1.instruction<<endl;
     delete[] instdata;
@@ -261,7 +261,7 @@ void Core::MEM(){
                         |(unsigned char)memory[pr3.aluResult+1]<<8
                         |(unsigned char)memory[pr3.aluResult+2]<<16
                         |(unsigned char)memory[pr3.aluResult+3]<<24;*/
-            auto data=LRUl(true,false,pr3.aluResult,4);
+            auto data = crp ? PLRUl(true,false,pr3.aluResult,4) : LRUl(true,false,pr3.aluResult,4);
             pr4.aluResult=(data[0])|(data[1]<<8)|(data[2]<<16)|(data[3]<<24);
             delete[] data;
         }
@@ -279,7 +279,7 @@ void Core::MEM(){
             data[1]=(pr3.rs2val >> 8)  & 0xFF;
             data[2]=(pr3.rs2val >> 16)  & 0xFF;
             data[3]=(pr3.rs2val >> 24)  & 0xFF;
-            LRUs(true,false,pr3.aluResult,4,data);
+            crp ? PLRUs(true,false,pr3.aluResult,4,data) : LRUs(true,false,pr3.aluResult,4,data);        
         }
     }
     else {
@@ -299,8 +299,7 @@ void Core::WB(){
 char* Core::LRUl(bool isl1, bool isi, int tag, int numbytes) {
     if(isl1 && isi){
         mem_stalls += l1llat;
-        //cout<<"tag="<<tag<<", added "<<l1llat<<"at l1"<<endl;
-        int ind = ((tag / bsize) * bsize) % numsetsl1;
+        int ind = ((tag / bsize)) % numsetsl1;
         int empty = -1;
         for(int i = 0; i < l1i.numblocks; i++){
             if(l1i.sets[ind].blocks[i].tag == (tag / bsize) * bsize){
@@ -350,8 +349,7 @@ char* Core::LRUl(bool isl1, bool isi, int tag, int numbytes) {
     }
     else if(isl1 && !isi){
         mem_stalls += l1llat;
-        //cout<<"tag="<<tag<<", added "<<l1llat<<"at l1"<<endl;
-        int ind = ((tag / bsize) * bsize) % numsetsl1;
+        int ind = ((tag / bsize)) % numsetsl1;
         int empty = -1;
         for(int i = 0; i < l1d.numblocks; i++){
             if(l1d.sets[ind].blocks[i].tag == (tag / bsize) * bsize){
@@ -402,8 +400,7 @@ char* Core::LRUl(bool isl1, bool isi, int tag, int numbytes) {
     else{
         // L2 unified — isi tells us whether to fetch from instructions[] or memory[]
         mem_stalls += l2llat;
-        //cout<<"tag="<<tag<<", added "<<l2llat<<"at l2"<<endl;
-        int ind = ((tag / bsize) * bsize) % numsetsl2;
+        int ind = ((tag / bsize)) % numsetsl2;
         int empty = -1;
         for(int i = 0; i < l2.numblocks; i++){
             if(l2.sets[ind].blocks[i].tag == (tag / bsize) * bsize &&
@@ -421,7 +418,6 @@ char* Core::LRUl(bool isl1, bool isi, int tag, int numbytes) {
             if(l2.sets[ind].blocks[i].tag == -1 && empty == -1) empty = i;
         }
         mem_stalls += memllat;
-        //cout<<"tag="<<tag<<", added "<<memllat<<"at mem"<<endl;
         // Helper lambda to fill a block from backing store
         auto fillBlock = [&](char* blockBytes) {
             if(isi){
@@ -476,7 +472,7 @@ void Core::LRUs(bool isl1, bool isi, int tag, int numbytes, char* data) {
     }
     else if(isl1 && !isi){
         mem_stalls += l1slat;
-        int ind = ((tag / bsize) * bsize) % numsetsl1;
+        int ind = ((tag / bsize)) % numsetsl1;
         int empty = -1;
         for(int i = 0; i < l1d.numblocks; i++){
             if(l1d.sets[ind].blocks[i].tag == (tag / bsize) * bsize){
@@ -487,7 +483,7 @@ void Core::LRUs(bool isl1, bool isi, int tag, int numbytes, char* data) {
                     }
                     lrut1d.table[ind][i] = 0;
                 }
-                LRUs(false, false, (tag / bsize) * bsize, numbytes, data);
+                LRUs(false, false, tag, numbytes, data);
                 return;
             }
             if(l1d.sets[ind].blocks[i].tag == -1 && empty == -1) empty = i;
@@ -525,7 +521,7 @@ void Core::LRUs(bool isl1, bool isi, int tag, int numbytes, char* data) {
     }
     else{
         mem_stalls += l2slat;
-        int ind = ((tag / bsize) * bsize) % numsetsl2;
+        int ind = ((tag / bsize)) % numsetsl2;
         int empty = -1;
         for(int i = 0; i < l2.numblocks; i++){
             if(l2.sets[ind].blocks[i].tag == (tag / bsize) * bsize &&
@@ -568,6 +564,220 @@ void Core::LRUs(bool isl1, bool isi, int tag, int numbytes, char* data) {
             memcpy(memory + tag, data, numbytes);
             l2.sets[ind].blocks[empty].tag = (tag / bsize) * bsize;
             l2.sets[ind].blocks[empty].isinst = false;
+            delete[] data;
+        }
+    }
+}
+
+char* Core::PLRUl(bool isl1, bool isi, int tag, int numbytes) {
+    if(isl1 && isi){
+        mem_stalls += l1llat;
+        int ind = ((tag / bsize) * bsize) % numsetsl1;
+        int empty = -1;
+        for(int i = 0; i < l1i.numblocks; i++){
+            if(l1i.sets[ind].blocks[i].tag == (tag / bsize) * bsize){
+                char* ret = new char[numbytes];
+                memcpy(ret, l1i.sets[ind].blocks[i].bytes + tag % bsize, numbytes);
+                plrut1i.update(ind, i);              // HIT: update tree away from i
+                return ret;
+            }
+            if(l1i.sets[ind].blocks[i].tag == -1 && empty == -1) empty = i;
+        }
+        // Miss
+        if(empty == -1){
+            char* ret = new char[numbytes];
+            auto retd = PLRUl(false, true, (tag / bsize) * bsize, bsize);
+            int slot = plrut1i.getVictim(ind);       // MISS full: ask PLRU for victim
+            l1i.sets[ind].blocks[slot].tag = (tag / bsize) * bsize;
+            l1i.sets[ind].blocks[slot].isinst = true;
+            memcpy(l1i.sets[ind].blocks[slot].bytes, retd, bsize);
+            memcpy(ret, l1i.sets[ind].blocks[slot].bytes + tag % bsize, numbytes);
+            plrut1i.update(ind, slot);               // update tree after install
+            delete[] retd;
+            return ret;
+        }
+        else{
+            char* ret = new char[numbytes];
+            auto retd = PLRUl(false, true, (tag / bsize) * bsize, bsize);
+            l1i.sets[ind].blocks[empty].tag = (tag / bsize) * bsize;
+            l1i.sets[ind].blocks[empty].isinst = true;
+            memcpy(l1i.sets[ind].blocks[empty].bytes, retd, bsize);
+            memcpy(ret, l1i.sets[ind].blocks[empty].bytes + tag % bsize, numbytes);
+            plrut1i.update(ind, empty);              // MISS empty: update tree
+            delete[] retd;
+            return ret;
+        }
+    }
+    else if(isl1 && !isi){
+        mem_stalls += l1llat;
+        int ind = ((tag / bsize) * bsize) % numsetsl1;
+        int empty = -1;
+        for(int i = 0; i < l1d.numblocks; i++){
+            if(l1d.sets[ind].blocks[i].tag == (tag / bsize) * bsize){
+                char* ret = new char[numbytes];
+                memcpy(ret, l1d.sets[ind].blocks[i].bytes + tag % bsize, numbytes);
+                plrut1d.update(ind, i);              // HIT
+                return ret;
+            }
+            if(l1d.sets[ind].blocks[i].tag == -1 && empty == -1) empty = i;
+        }
+        if(empty == -1){
+            char* ret = new char[numbytes];
+            auto retd = PLRUl(false, false, (tag / bsize) * bsize, bsize);
+            int slot = plrut1d.getVictim(ind);       // MISS full
+            l1d.sets[ind].blocks[slot].tag = (tag / bsize) * bsize;
+            l1d.sets[ind].blocks[slot].isinst = false;
+            memcpy(l1d.sets[ind].blocks[slot].bytes, retd, bsize);
+            memcpy(ret, l1d.sets[ind].blocks[slot].bytes + tag % bsize, numbytes);
+            plrut1d.update(ind, slot);
+            delete[] retd;
+            return ret;
+        }
+        else{
+            char* ret = new char[numbytes];
+            auto retd = PLRUl(false, false, (tag / bsize) * bsize, bsize);
+            l1d.sets[ind].blocks[empty].tag = (tag / bsize) * bsize;
+            l1d.sets[ind].blocks[empty].isinst = false;
+            memcpy(l1d.sets[ind].blocks[empty].bytes, retd, bsize);
+            memcpy(ret, l1d.sets[ind].blocks[empty].bytes + tag % bsize, numbytes);
+            plrut1d.update(ind, empty);
+            delete[] retd;
+            return ret;
+        }
+    }
+    else{
+        // L2 unified
+        mem_stalls += l2llat;
+        int ind = ((tag / bsize) * bsize) % numsetsl2;
+        int empty = -1;
+        for(int i = 0; i < l2.numblocks; i++){
+            if(l2.sets[ind].blocks[i].tag == (tag / bsize) * bsize &&
+               l2.sets[ind].blocks[i].isinst == isi){
+                char* ret = new char[numbytes];
+                memcpy(ret, l2.sets[ind].blocks[i].bytes + tag % bsize, numbytes);
+                plrut2.update(ind, i);               // HIT
+                return ret;
+            }
+            if(l2.sets[ind].blocks[i].tag == -1 && empty == -1) empty = i;
+        }
+        mem_stalls += memllat;
+        auto fillBlock = [&](char* blockBytes) {
+            if(isi){
+                int startInst = tag / 4;
+                for(int i = 0; i < bsize / 4; i++){
+                    int idx = startInst + i;
+                    if(idx >= (int)instructions.size()) break;
+                    int inst = instructions[idx];
+                    blockBytes[4*i+0] =  inst        & 0xFF;
+                    blockBytes[4*i+1] = (inst >>  8) & 0xFF;
+                    blockBytes[4*i+2] = (inst >> 16) & 0xFF;
+                    blockBytes[4*i+3] = (inst >> 24) & 0xFF;
+                }
+            }
+            else{
+                memcpy(blockBytes, memory + (tag / bsize) * bsize, bsize);
+            }
+        };
+        if(empty == -1){
+            int slot = plrut2.getVictim(ind);        // MISS full
+            l2.sets[ind].blocks[slot].tag = (tag / bsize) * bsize;
+            l2.sets[ind].blocks[slot].isinst = isi;
+            fillBlock(l2.sets[ind].blocks[slot].bytes);
+            char* ret = new char[numbytes];
+            memcpy(ret, l2.sets[ind].blocks[slot].bytes + tag % bsize, numbytes);
+            plrut2.update(ind, slot);
+            return ret;
+        }
+        else{
+            l2.sets[ind].blocks[empty].tag = (tag / bsize) * bsize;
+            l2.sets[ind].blocks[empty].isinst = isi;
+            fillBlock(l2.sets[ind].blocks[empty].bytes);
+            char* ret = new char[numbytes];
+            memcpy(ret, l2.sets[ind].blocks[empty].bytes + tag % bsize, numbytes);
+            plrut2.update(ind, empty);
+            return ret;
+        }
+    }
+}
+
+void Core::PLRUs(bool isl1, bool isi, int tag, int numbytes, char* data) {
+    if(isl1 && isi){
+        delete[] data;
+        return;
+    }
+    else if(isl1 && !isi){
+        mem_stalls += l1slat;
+        int ind = ((tag / bsize) * bsize) % numsetsl1;
+        int empty = -1;
+        for(int i = 0; i < l1d.numblocks; i++){
+            if(l1d.sets[ind].blocks[i].tag == (tag / bsize) * bsize){
+                memcpy(l1d.sets[ind].blocks[i].bytes + tag % bsize, data, numbytes);
+                plrut1d.update(ind, i);              // HIT
+                PLRUs(false, false, (tag / bsize) * bsize, numbytes, data);
+                return;
+            }
+            if(l1d.sets[ind].blocks[i].tag == -1 && empty == -1) empty = i;
+        }
+        if(empty == -1){
+            auto retd = PLRUl(false, false, (tag / bsize) * bsize, bsize);
+            int slot = plrut1d.getVictim(ind);       // MISS full
+            l1d.sets[ind].blocks[slot].tag = (tag / bsize) * bsize;
+            l1d.sets[ind].blocks[slot].isinst = false;
+            memcpy(l1d.sets[ind].blocks[slot].bytes, retd, bsize);
+            memcpy(l1d.sets[ind].blocks[slot].bytes + tag % bsize, data, numbytes);
+            memcpy(retd + tag % bsize, data, numbytes);
+            plrut1d.update(ind, slot);
+            PLRUs(false, false, (tag / bsize) * bsize, bsize, retd);
+            delete[] data;
+        }
+        else{
+            auto retd = PLRUl(false, false, (tag / bsize) * bsize, bsize);
+            l1d.sets[ind].blocks[empty].tag = (tag / bsize) * bsize;
+            l1d.sets[ind].blocks[empty].isinst = false;
+            for(int i = 0; i < plrut1d.numsets; i++){  // increment valid entries
+                if(l1d.sets[ind].blocks[i].tag > -1) {} // PLRU handles this via update
+            }
+            memcpy(l1d.sets[ind].blocks[empty].bytes, retd, bsize);
+            memcpy(l1d.sets[ind].blocks[empty].bytes + tag % bsize, data, numbytes);
+            memcpy(retd + tag % bsize, data, numbytes);
+            plrut1d.update(ind, empty);
+            PLRUs(false, false, (tag / bsize) * bsize, bsize, retd);
+            delete[] data;
+        }
+    }
+    else{
+        mem_stalls += l2slat;
+        int ind = ((tag / bsize) * bsize) % numsetsl2;
+        int empty = -1;
+        for(int i = 0; i < l2.numblocks; i++){
+            if(l2.sets[ind].blocks[i].tag == (tag / bsize) * bsize &&
+               l2.sets[ind].blocks[i].isinst == isi){
+                memcpy(l2.sets[ind].blocks[i].bytes + tag % bsize, data, numbytes);
+                plrut2.update(ind, i);               // HIT
+                memcpy(memory + tag, data, numbytes);
+                delete[] data;
+                return;
+            }
+            if(l2.sets[ind].blocks[i].tag == -1 && empty == -1) empty = i;
+        }
+        mem_stalls += memslat;
+        if(empty == -1){
+            int slot = plrut2.getVictim(ind);        // MISS full
+            memcpy(l2.sets[ind].blocks[slot].bytes, memory + (tag / bsize) * bsize, bsize);
+            memcpy(l2.sets[ind].blocks[slot].bytes + tag % bsize, data, numbytes);
+            memcpy(memory + tag, data, numbytes);
+            l2.sets[ind].blocks[slot].tag = (tag / bsize) * bsize;
+            l2.sets[ind].blocks[slot].isinst = false;
+            plrut2.update(ind, slot);
+            delete[] data;
+        }
+        else{
+            memcpy(l2.sets[ind].blocks[empty].bytes, memory + (tag / bsize) * bsize, bsize);
+            memcpy(l2.sets[ind].blocks[empty].bytes + tag % bsize, data, numbytes);
+            memcpy(memory + tag, data, numbytes);
+            l2.sets[ind].blocks[empty].tag = (tag / bsize) * bsize;
+            l2.sets[ind].blocks[empty].isinst = false;
+            plrut2.update(ind, empty);
             delete[] data;
         }
     }

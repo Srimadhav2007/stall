@@ -28,9 +28,22 @@ void Core::execConfig(string& program){
 }
 
 void Core::AssemblyToMachineCode(vector<string>& insts){
-    auto parseReg = [](const string& s) {
+    auto parseReg = [](string s) {
+        if (s.empty()) return -1;
+        s.erase(remove(s.begin(), s.end(), ','), s.end());
         if (s.empty()) return -1;
         if (s[0] == 'x' || s[0] == 'r') return stoi(s.substr(1));
+
+        static const map<string, int> abi = {
+            {"zero",0},{"ra",1},{"sp",2},{"gp",3},{"tp",4},
+            {"t0",5},{"t1",6},{"t2",7},
+            {"s0",8},{"fp",8},{"s1",9},
+            {"a0",10},{"a1",11},{"a2",12},{"a3",13},{"a4",14},{"a5",15},{"a6",16},{"a7",17},
+            {"s2",18},{"s3",19},{"s4",20},{"s5",21},{"s6",22},{"s7",23},{"s8",24},{"s9",25},{"s10",26},{"s11",27},
+            {"t3",28},{"t4",29},{"t5",30},{"t6",31}
+        };
+        auto it = abi.find(s);
+        if (it != abi.end()) return it->second;
         return -1;
     };
     for(string inst:insts){
@@ -38,8 +51,10 @@ void Core::AssemblyToMachineCode(vector<string>& insts){
         stringstream ss(inst);
         string word;
         while(ss >> word){
+            word.erase(remove(word.begin(), word.end(), ','), word.end());
             pieces.push_back(word);
         }
+        if(pieces.empty())continue;
         int instruction=0;
         if(opcodes.find(pieces[0])==opcodes.end()){
             instruction=INT32_MAX;
@@ -53,6 +68,7 @@ void Core::AssemblyToMachineCode(vector<string>& insts){
             case 1:
             case 2:
             case 3:
+            case 15:
             {
                 int reg=parseReg(pieces[1]);
                 if(reg==-1){
@@ -149,12 +165,11 @@ void Core::AssemblyToMachineCode(vector<string>& insts){
                 instruction|=(reg<<14);
                 int imm=stoi(pieces[2].substr(0,pieces[2].find('(')));
                 if(imm<0)instruction|=0b10000000000000;
-                instruction=instruction|((abs(imm)<<21)>>19);
+                instruction |= ((abs(imm) & 0x07FF) << 2);
                 break;
             }
             case 9:
             case 10:
-            case 15:
             {
                 int reg=parseReg(pieces[1]);
                 if(reg==-1){
@@ -215,6 +230,9 @@ void Core::Parse(stringstream& ss){
     string line;
     bool indata = false;
     while(getline(ss, line)){
+        if(line.find_first_not_of(" \t\r") == string::npos) line.clear();
+        else line.erase(0, line.find_first_not_of(" \t\r"));
+
         if(!line.empty()){
             if(line==".data"){ indata = true; continue; }
             if(line==".text"){ indata = false; continue; }
@@ -296,11 +314,114 @@ vector<int> Core::execute(string& program){
     for(int i = 0; i < 32; i++) cout<<registers[i].i<<" ";
     cout<<endl;
     cout<<"Clock="<<clock<<"\tEx Stalls="<<num_stalls<<"\tMem Stalls="<<mem_stalls<<"\tInstructions run="<<num_instructions<<"\tIPC="<<ipc<<endl;
+    ofstream file("hardware.json",ofstream::trunc);//to remove the whole contents, ofstream::app is append
+    json hardware;
+    hardware["result"]["clocks"]=clock;
+    hardware["result"]["memstalls"]=mem_stalls;
+    hardware["result"]["exstalls"]=num_stalls;
+    hardware["result"]["numinsts"]=num_instructions;
+    hardware["result"]["ipc"]=ipc;
+    hardware["config"]["memsize"]=memsize;
+    hardware["config"]["l1isize"]   = l1isize;
+    hardware["config"]["l1dsize"]   = l1dsize;
+    hardware["config"]["l2size"]    = l2size;
+    hardware["config"]["bsize"]     = bsize;
+    hardware["config"]["numsetsl1"] = numsetsl1;
+    hardware["config"]["numsetsl2"] = numsetsl2;
+    hardware["config"]["crp"]       = crp;
+    hardware["config"]["bpsl1"]     = bpsl1;
+    hardware["config"]["bpsl2"]     = bpsl2;
+    for(int i=0;i<32;i++){
+        hardware["registers"].push_back(registers[i].i);
+    }
+    for(int i=0;i<memsize;i++){
+        hardware["memory"].push_back(memory[i]);
+    }
+    if(crp==0){
+        auto serializeCache = [&](Cache& cache, LRUTable& lru, const string& name) {
+            json c;
+            c["numsets"]   = cache.numsets;
+            c["numblocks"] = cache.numblocks;
+            c["blocksize"] = cache.numbytes;
+            for(int s = 0; s < cache.numsets; s++){
+                json set;
+                for(int b = 0; b < cache.numblocks; b++){
+                    json block;
+                    block["tag"]    = cache.sets[s].blocks[b].tag;
+                    block["dirty"]  = cache.sets[s].blocks[b].dirty;
+                    block["isinst"] = cache.sets[s].blocks[b].isinst;
+                    block["lru"]    = lru.table[s][b];
+                    for(int byte = 0; byte < cache.numbytes; byte++){
+                        block["bytes"].push_back((int)(unsigned char)cache.sets[s].blocks[b].bytes[byte]);
+                    }
+                    set.push_back(block);
+                }
+                c["sets"].push_back(set);
+            }
+            hardware[name] = c;
+        };
+        serializeCache(l1i,  lrut1i, "l1i");
+        serializeCache(l1d,  lrut1d, "l1d");
+        serializeCache(l2,   lrut2,  "l2");
+    }
+    else{
+        auto serializePLRUCache = [&](Cache& cache, PLRUTable& plru, const string& name) {
+            json c;
+            c["numsets"]   = cache.numsets;
+            c["numblocks"] = cache.numblocks;
+            c["blocksize"] = cache.numbytes;
+
+            for(int s = 0; s < cache.numsets; s++){
+                json set;
+                // Get the current victim index for this set according to PLRU
+                int currentVictim = plru.getVictim(s);
+
+                for(int b = 0; b < cache.numblocks; b++){
+                    json block;
+                    block["tag"]    = cache.sets[s].blocks[b].tag;
+                    block["dirty"]  = cache.sets[s].blocks[b].dirty;
+                    block["isinst"] = cache.sets[s].blocks[b].isinst;
+                    
+                    // For PLRU, we can mark the block's status: 
+                    // 1 if it's the next victim, 0 otherwise.
+                    block["plru_victim"] = (b == currentVictim); 
+                    // Or store the raw set bits for debugging
+                    block["set_bits"] = plru.bits[s];
+
+                    for(int byte = 0; byte < cache.numbytes; byte++){
+                        block["bytes"].push_back((int)(unsigned char)cache.sets[s].blocks[b].bytes[byte]);
+                    }
+                    set.push_back(block);
+                }
+                c["sets"].push_back(set);
+            }
+            hardware[name] = c;
+        };
+    serializePLRUCache(l1i,  plrut1i, "l1i_plru");
+    serializePLRUCache(l1d,  plrut1d, "l1d_plru");
+    serializePLRUCache(l2,   plrut2,  "l2_plru");
+    }
+
+    file << hardware.dump(4);//for indentation
+    file.close();
     l1i.ground();
     l1d.ground();
     l2.ground();
-    lrut1i.ground();
-    lrut1d.ground();
-    lrut2.ground();
-    return {(int)num_instructions,clock,num_stalls};
+    if(crp==0){
+        lrut1i.ground();
+        lrut1d.ground();
+        lrut2.ground();
+    }
+    else{
+        plrut1i.ground();
+        plrut1d.ground();
+        plrut2.ground();
+    }
+
+    vector<int> regs_snapshot;
+    regs_snapshot.reserve(32);
+    for(int i = 0; i < 32; i++){
+        regs_snapshot.push_back(registers[i].i);
+    }
+    return regs_snapshot;
 }
