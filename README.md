@@ -58,3 +58,14 @@
     - We decided to give pause to syntax error catches, because we felt it would be very complicated for now.
     - Along with LRU we decided to implement Pseudo-LRU as alternative Cache Replacement Policy.
     
+Added all the things necessary for Virtual Memory (TLB,PageTable,etc ..).
+The trace files are already in the repo, inside the 'phase3_traces' folder.
+
+## Running the project
+You can run it by compiling the 'trace_runner.cpp' and also the Simulator folder by doing 
+`g++ trace_runner.cpp Simulator/*.cpp -o trace_runner`
+
+And then you run the required trace by doing the command
+`./trace_runner .\phase3_traces\trace_file.trace`
+
+Now you will get all the results that are required for it.
