@@ -171,6 +171,32 @@ void Core::IDRF(){
         next_pr2.ALUOp = 7;
         break;
     }
+    case 16:
+    case 17:
+    case 18:
+    case 19:
+    case 20:
+    {
+        next_pr2.rd  = rd_field(inst);
+        next_pr2.rs1 = rs1_field(inst);
+        next_pr2.rs2 = rs2_field(inst);
+        next_pr2.RegWrite = (next_pr2.rd != 0);
+        next_pr2.ALUOp = 9+(opc-16);
+        break;
+    }
+    case 21:
+    case 22:
+    case 23:
+    case 24:
+    case 25:
+    {
+        next_pr2.rd  = rd_field(inst);
+        next_pr2.rs1 = rs1_field(inst);
+        next_pr2.imm = imm_addi(inst);
+        next_pr2.RegWrite = (next_pr2.rd != 0);
+        next_pr2.ALUOp = 14+(opc-21);
+        break;
+    }
     default:
     {
         pr3.valid=false;

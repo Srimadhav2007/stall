@@ -69,6 +69,11 @@ void Core::AssemblyToMachineCode(vector<string>& insts){
             case 2:
             case 3:
             case 15:
+            case 16:
+            case 17:
+            case 18:
+            case 19:
+            case 20:
             {
                 int reg=parseReg(pieces[1]);
                 if(reg==-1){
@@ -91,6 +96,11 @@ void Core::AssemblyToMachineCode(vector<string>& insts){
                 break;
             }
             case 4:
+            case 21:
+            case 22:
+            case 23:
+            case 24:
+            case 25:
             {
                 int reg=parseReg(pieces[1]);
                 if(reg==-1){

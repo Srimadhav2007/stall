@@ -24,4 +24,14 @@ void Core::AluConfig(){
         pr3.aluResult = pr2.pc + 1; 
         pr3.branchTarget = pr2.imm;
     });
+    functions.push_back([this](){pr3.aluResult=(pr2.rs1val<<pr2.rs2val);});//9: sll
+    functions.push_back([this](){pr3.aluResult=(pr2.rs1val>>pr2.rs2val);});//10: srl
+    functions.push_back([this](){pr3.aluResult=(pr2.rs1val&pr2.rs2val);});//11 and
+    functions.push_back([this](){pr3.aluResult=(pr2.rs1val|pr2.rs2val);});//12 or
+    functions.push_back([this](){pr3.aluResult=(pr2.rs1val^pr2.rs2val);});//13 xor
+    functions.push_back([this](){pr3.aluResult=(pr2.rs1val<<pr2.rs2val);});//14: slli
+    functions.push_back([this](){pr3.aluResult=(pr2.rs1val>>pr2.rs2val);});//15: srli
+    functions.push_back([this](){pr3.aluResult=(pr2.rs1val&pr2.rs2val);});//16 andi
+    functions.push_back([this](){pr3.aluResult=(pr2.rs1val|pr2.rs2val);});//17 ori
+    functions.push_back([this](){pr3.aluResult=(pr2.rs1val^pr2.rs2val);});//18 xori
 }

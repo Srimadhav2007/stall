@@ -56,6 +56,16 @@ Core::Core(){
 	opcodes["j"]=13;
 	opcodes["jal"]=14;
 	opcodes["slt"]=15;
+	opcodes["sll"]=16;
+	opcodes["srl"]=17;
+	opcodes["and"]=18;
+	opcodes["or"]=19;
+	opcodes["xor"]=20;
+	opcodes["slli"]=21;
+	opcodes["srli"]=22;
+	opcodes["andi"]=23;
+	opcodes["ori"]=24;
+	opcodes["xori"]=25;
 
 	auto &lat = config["latency"][0];
 	forwarding = config["forwarding"].get<bool>();
@@ -76,6 +86,16 @@ Core::Core(){
 	latencies.push_back(lat["j"].get<int>());
 	latencies.push_back(lat["jal"].get<int>());
 	latencies.push_back(lat["slt"].get<int>());
+	latencies.push_back(lat["sll"].get<int>());
+	latencies.push_back(lat["srl"].get<int>());
+	latencies.push_back(lat["and"].get<int>());
+	latencies.push_back(lat["or"].get<int>());
+	latencies.push_back(lat["xor"].get<int>());
+	latencies.push_back(lat["slli"].get<int>());
+	latencies.push_back(lat["srli"].get<int>());
+	latencies.push_back(lat["andi"].get<int>());
+	latencies.push_back(lat["ori"].get<int>());
+	latencies.push_back(lat["xori"].get<int>());
 
     pc=0;
     clock=0;
