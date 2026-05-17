@@ -304,7 +304,19 @@ void Core::Parse(stringstream& ss){
 
 vector<int> Core::execute(string& program){
     execConfig(program);
-    
+    // Inside your pipeline loop, add:
+    if(clock % 10 == 0){
+        cout << "DEBUG: clock=" << clock 
+            << " pc=" << pc 
+            << " pageFaults=" << mmu.pageFaults
+            << " evictions=" << mmu.evictions << endl;
+    }
+
+    // Also add a cycle limit to detect infinite loops:
+    if(clock > 50000){
+        cout << "CYCLE LIMIT REACHED — possible infinite loop at pc=" << pc << endl;
+        return vector<int>();
+    }
     cout<<"Before execution:\n";
     for(int i = 0; i < 32; i++) cout<<registers[i].i<<" ";
 
@@ -334,13 +346,10 @@ vector<int> Core::execute(string& program){
     hardware["config"]["memsize"]=memsize;
     hardware["config"]["l1isize"]   = l1isize;
     hardware["config"]["l1dsize"]   = l1dsize;
-    hardware["config"]["l2size"]    = l2size;
     hardware["config"]["bsize"]     = bsize;
     hardware["config"]["numsetsl1"] = numsetsl1;
-    hardware["config"]["numsetsl2"] = numsetsl2;
     hardware["config"]["crp"]       = crp;
     hardware["config"]["bpsl1"]     = bpsl1;
-    hardware["config"]["bpsl2"]     = bpsl2;
     for(int i=0;i<32;i++){
         hardware["registers"].push_back(registers[i].i);
     }
@@ -372,7 +381,6 @@ vector<int> Core::execute(string& program){
         };
         serializeCache(l1i,  lrut1i, "l1i");
         serializeCache(l1d,  lrut1d, "l1d");
-        serializeCache(l2,   lrut2,  "l2");
     }
     else{
         auto serializePLRUCache = [&](Cache& cache, PLRUTable& plru, const string& name) {
@@ -409,23 +417,20 @@ vector<int> Core::execute(string& program){
         };
     serializePLRUCache(l1i,  plrut1i, "l1i_plru");
     serializePLRUCache(l1d,  plrut1d, "l1d_plru");
-    serializePLRUCache(l2,   plrut2,  "l2_plru");
     }
-
+    printMMUStats();
     file << hardware.dump(4);//for indentation
     file.close();
     l1i.ground();
     l1d.ground();
-    l2.ground();
+    mmu.ground();
     if(crp==0){
         lrut1i.ground();
         lrut1d.ground();
-        lrut2.ground();
     }
     else{
         plrut1i.ground();
         plrut1d.ground();
-        plrut2.ground();
     }
 
     vector<int> regs_snapshot;

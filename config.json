@@ -29,19 +29,25 @@
             "xori": 1
         }
     ],
-    "memory": 4096,
     "forwarding": true,
-    "l1i": 16,
-    "l1d": 16,
-    "l2": 64,
-    "bsize": 8,
-    "sets1": 1,
-    "sets2": 1,
-    "crp": 0,
-    "l1llat": 3,
-    "l2llat": 6,
+    "memory": 262144,
+    "l1llat": 1,
+    "l1slat": 1,
     "memllat": 10,
-    "l1slat": 3,
-    "l2slat": 6,
-    "memslat": 10
+    "memslat": 10,
+
+    "l1i": 4096,
+    "l1d": 4096,
+    "bsize": 64,
+    "sets1": 16,
+    "crp": 0,
+
+    "page_size": 4096,
+    "phys_mem_size": 262144,
+    "virt_mem_size": 2147483648,
+    "tlb_entries": 16,
+    "tlb_hit_lat": 1,
+    "page_walk_lat": 10,
+    "page_fault_lat": 50,
+    "swap_lat": 500
 }

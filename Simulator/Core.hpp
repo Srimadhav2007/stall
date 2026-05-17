@@ -10,10 +10,10 @@
 #include "json.hpp"
 #include "Registers.hpp"
 #include "Cache.hpp"
+#include "MMU.hpp"
 
 using namespace std;
 using json = nlohmann::json;
-
 
 class Core{
 private:
@@ -43,34 +43,26 @@ private:
 
     int l1isize;
     int l1dsize;
-    int l2size;
     int bsize;
     int numsetsl1;
-    int numsetsl2;
     int crp;
     int bpsl1;
-    int bpsl2;
     Cache l1i;
     Cache l1d;
-    Cache l2;
     
     LRUTable lrut1i;
     LRUTable lrut1d;
-    LRUTable lrut2;
     char* LRUl(bool isl1,bool isi,int tag,int numbytes);
     void LRUs(bool isl1,bool isi,int tag,int numbytes,char* data);
     
     PLRUTable plrut1i;
     PLRUTable plrut1d;
-    PLRUTable plrut2;
-    char* PLRUl(bool isl1,bool isi,int tag,int numbytes);   // ADD — load
-    void  PLRUs(bool isl1,bool isi,int tag,int numbytes,char* data); // ADD — store
+    char* PLRUl(bool isl1,bool isi,int tag,int numbytes);
+    void  PLRUs(bool isl1,bool isi,int tag,int numbytes,char* data);
 
     int l1llat;
-    int l2llat;
     int memllat;
     int l1slat;
-    int l2slat;
     int memslat;
 
     IF_IDRF pr1;
@@ -95,12 +87,22 @@ private:
     void Parse(stringstream& ss);
     void AssemblyToMachineCode(vector<string>& insts);
 
+    MMU  mmu;
+    int  pageSize;
+    int  physMemSize;
+    int  tlbEntries;
+    int  tlbHitLat;
+    int  pageWalkLat;
+    int  pageFaultLat;
+    int  swapLat;
     
-
 public:
+    void printMMUStats();
+
     Core();
     vector<int> execute(string& program);
     ~Core();
+    
 };
 
 #endif

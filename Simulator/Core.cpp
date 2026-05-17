@@ -13,32 +13,34 @@ Core::Core(){
 	crp=config["crp"].get<int>();
 	l1isize=config["l1i"].get<int>();
 	l1dsize=config["l1d"].get<int>();
-	l2size=config["l2"].get<int>();
 	bsize=config["bsize"].get<int>();
 	numsetsl1=config["sets1"].get<int>();
-	numsetsl2=config["sets2"].get<int>();
 	l1llat=config["l1llat"].get<int>();
-	l2llat=config["l2llat"].get<int>();
 	memllat=config["memllat"].get<int>();
 	l1slat=config["l1slat"].get<int>();
-	l2slat=config["l2slat"].get<int>();
 	memslat=config["memslat"].get<int>();
 	bpsl1=(l1isize/(numsetsl1*bsize));
-	bpsl2=(l2size/(numsetsl2*bsize));
 	l1i.init(numsetsl1,bpsl1,bsize);
 	l1d.init(numsetsl1,bpsl1,bsize);
-	l2.init(numsetsl2,bpsl2,bsize);
 	
 	if(crp==0){ 
 	lrut1i.init(numsetsl1,bpsl1);
 	lrut1d.init(numsetsl1,bpsl1);
-	lrut2.init(numsetsl2,bpsl2);
 	}
 	else{
 	plrut1i.init(numsetsl1,bpsl1); 
 	plrut1d.init(numsetsl1,bpsl1); 
-	plrut2.init(numsetsl2,bpsl2); 
 	}
+
+	pageSize     = config["page_size"].get<int>();
+	physMemSize  = config["phys_mem_size"].get<int>();
+	tlbEntries   = config["tlb_entries"].get<int>();
+	tlbHitLat    = config["tlb_hit_lat"].get<int>();
+	pageWalkLat  = config["page_walk_lat"].get<int>();
+	pageFaultLat = config["page_fault_lat"].get<int>();
+	swapLat      = config["swap_lat"].get<int>();
+
+	mmu.init(physMemSize, pageSize, tlbEntries,tlbHitLat, pageWalkLat, pageFaultLat,swapLat, memory);
 
 	opcodes["add"]=0;
 	opcodes["sub"]=1;
@@ -102,6 +104,28 @@ Core::Core(){
     latency_acc=0;
 	registers=new Register[32];
     AluConfig();
+}
+
+void Core::printMMUStats() {
+    int total = clock;
+    cout << "\n===== Execution Stats =====" << endl;
+    cout << "Total Cycles               : " << clock                         << endl;
+    cout << "Instructions Retired       : " << num_instructions              << endl;
+    cout << "IPC                        : " << (double)num_instructions/clock << endl;
+    cout << "Ex Stalls                  : " << num_stalls                    << endl;
+    cout << "Mem Stalls                 : " << mem_stalls                    << endl;
+
+    cout << "\n===== MMU / Virtual Memory Stats =====" << endl;
+    cout << "TLB Hits                   : " << mmu.tlbHits                  << endl;
+    cout << "TLB Misses                 : " << mmu.tlbMisses                << endl;
+    cout << "Page Walks                 : " << mmu.tlbMisses                << endl;
+    cout << "Page Faults                : " << mmu.pageFaults               << endl;
+    cout << "Page Evictions             : " << mmu.evictions                << endl;
+    cout << "Dirty Evictions/Writebacks : " << mmu.dirtyWritebacks          << endl;
+    cout << "Swap Outs                  : " << mmu.swapOuts                 << endl;
+    cout << "Swap Ins                   : " << mmu.swapIns                  << endl;
+    cout << "Total Translation Penalty  : " << mmu.totalTranslationPenalty  << " cycles" << endl;
+    cout << "=======================================" << endl;
 }
 
 Core::~Core(){
