@@ -131,3 +131,5 @@ This allows experimentation with different architectural designs and performance
 - Native C++ simulation backend
 - JSON-based configuration system
 - Performance analysis through configurable architectural parameters
+
+### Note: Currently, the project allows GUI only for windows and linux-amd machines. In future, we will try to include that for linux-intel machines too, and will try to get applications to download
