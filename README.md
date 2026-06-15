@@ -130,5 +130,4 @@ This allows experimentation with different architectural designs and performance
 - Java Swing graphical interface
 - Native C++ simulation backend
 - JSON-based configuration system
-- Custom instruction encoding
 - Performance analysis through configurable architectural parameters
