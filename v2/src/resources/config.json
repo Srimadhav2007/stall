@@ -1,0 +1,53 @@
+{
+    "latency": [
+        {
+            "add": 1,
+            "sub": 1,
+            "mul": 3,
+            "div": 1,
+            "addi": 1,
+            "li": 1,
+            "la": 1,
+            "lw": 1,
+            "sw": 1,
+            "bne": 1,
+            "beq": 1,
+            "bnez": 1,
+            "beqz": 1,
+            "j": 1,
+            "jal": 1,
+            "slt": 1,
+            "sll": 1,
+            "srl": 1,
+            "and": 1,
+            "or": 1,
+            "xor": 1,
+            "slli": 1,
+            "srli": 1,
+            "andi": 1,
+            "ori": 1,
+            "xori": 1
+        }
+    ],
+    "forwarding": true,
+    "memory": 262144,
+    "l1llat": 1,
+    "l1slat": 1,
+    "memllat": 10,
+    "memslat": 10,
+
+    "l1i": 4096,
+    "l1d": 4096,
+    "bsize": 64,
+    "sets1": 16,
+    "crp": 0,
+
+    "page_size": 4096,
+    "phys_mem_size": 262144,
+    "virt_mem_size": 2147483648,
+    "tlb_entries": 16,
+    "tlb_hit_lat": 1,
+    "page_walk_lat": 10,
+    "page_fault_lat": 50,
+    "swap_lat": 500
+}
